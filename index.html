@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Quản lý học viên</title>
-  <link rel="stylesheet" href="sm.css?v=6">
+  <link rel="stylesheet" href="sm.css?v=7">
   <script>try{if(localStorage.getItem("sm_theme")==="dark")document.documentElement.setAttribute("data-theme","dark");}catch(e){}</script>
 </head>
 <body>
@@ -43,13 +43,14 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=6"></script>
-  <script src="sm-lib.js?v=6"></script>
-  <script src="sm-students.js?v=6"></script>
-  <script src="sm-classes.js?v=6"></script>
-  <script src="sm-schedule.js?v=6"></script>
-  <script src="sm-attendance.js?v=6"></script>
-  <script src="sm-tuition.js?v=6"></script>
+  <script src="config.js?v=7"></script>
+  <script src="sm-lib.js?v=7"></script>
+  <script src="sm-students.js?v=7"></script>
+  <script src="sm-classes.js?v=7"></script>
+  <script src="sm-schedule.js?v=7"></script>
+  <script src="sm-attendance.js?v=7"></script>
+  <script src="sm-tuition.js?v=7"></script>
+  <script src="sm-payments.js?v=7"></script>
   <script>
     const $ = id => document.getElementById(id);
     let ME = null, SETTINGS = null;
@@ -84,7 +85,7 @@
         ["4", "Lịch tuần & buổi học", true],
         ["5", "Điểm danh", true],
         ["6", "Học phí & hóa đơn tháng", true],
-        ["7", "Thanh toán & biên nhận", false],
+        ["7", "Thanh toán & biên nhận", true],
         ["8", "Chuyển lớp / rời lớp", false],
         ["9", "Bảng số liệu tổng quan", false],
         ["10", "Báo cáo & xuất file", false],
@@ -159,6 +160,7 @@
       if (pane === "schedule") return Schedule.render($("content"), ME);
       if (pane === "attendance") return Attendance.render($("content"), ME);
       if (pane === "tuition") return Tuition.render($("content"), ME);
+      if (pane === "payments") return Payments.render($("content"), ME);
       $("content").innerHTML = placeholder(pane);
     }
 

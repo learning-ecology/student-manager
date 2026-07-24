@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Đăng nhập — Quản lý học viên</title>
+  <link rel="stylesheet" href="sm.css">
+</head>
+<body>
+  <div class="auth-wrap">
+    <form class="auth-card" id="form" autocomplete="on">
+      <h1>Quản lý học viên</h1>
+      <p class="sub">Đăng nhập để tiếp tục</p>
+      <div class="field">
+        <label for="email">Email</label>
+        <input id="email" type="email" required autocomplete="username" placeholder="ban@example.com">
+      </div>
+      <div class="field">
+        <label for="pw">Mật khẩu</label>
+        <input id="pw" type="password" required autocomplete="current-password" placeholder="••••••••">
+      </div>
+      <button class="btn" id="go" style="width:100%;margin-top:.4rem;">Đăng nhập</button>
+      <p class="msg" id="msg"></p>
+      <p class="muted" style="text-align:center;font-size:.82rem;margin:.8rem 0 0;">
+        Quên mật khẩu? Liên hệ chủ trung tâm để đặt lại.</p>
+    </form>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="sm-lib.js"></script>
+  <script>
+    const $ = id => document.getElementById(id);
+    const msg = $("msg");
+    const say = (t, err) => { msg.textContent = t; msg.className = "msg" + (err ? " err" : ""); };
+
+    if (new URLSearchParams(location.search).has("denied"))
+      say("Tài khoản chưa được cấp quyền vào ứng dụng này.", true);
+
+    // đã đăng nhập rồi thì vào thẳng
+    sb.auth.getSession().then(({ data }) => { if (data.session) location.href = "index.html"; });
+
+    $("form").addEventListener("submit", async e => {
+      e.preventDefault();
+      const email = $("email").value.trim(), pw = $("pw").value;
+      if (!email || !pw) return say("Nhập email và mật khẩu.", true);
+      $("go").disabled = true; say("Đang đăng nhập…");
+      const { data, error } = await sb.auth.signInWithPassword({ email, password: pw });
+      if (error) { $("go").disabled = false; return say("Sai email hoặc mật khẩu.", true); }
+      // xác nhận có trong app_users
+      const { data: prof } = await sb.from("app_users").select("active").eq("id", data.user.id).maybeSingle();
+      if (!prof || !prof.active) { await sb.auth.signOut(); $("go").disabled = false; return say("Tài khoản chưa được cấp quyền vào ứng dụng này.", true); }
+      location.href = "index.html";
+    });
+  </script>
+</body>
+</html>

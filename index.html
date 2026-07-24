@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Quản lý học viên</title>
-  <link rel="stylesheet" href="sm.css?v=5">
+  <link rel="stylesheet" href="sm.css?v=6">
   <script>try{if(localStorage.getItem("sm_theme")==="dark")document.documentElement.setAttribute("data-theme","dark");}catch(e){}</script>
 </head>
 <body>
@@ -43,12 +43,13 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=5"></script>
-  <script src="sm-lib.js?v=5"></script>
-  <script src="sm-students.js?v=5"></script>
-  <script src="sm-classes.js?v=5"></script>
-  <script src="sm-schedule.js?v=5"></script>
-  <script src="sm-attendance.js?v=5"></script>
+  <script src="config.js?v=6"></script>
+  <script src="sm-lib.js?v=6"></script>
+  <script src="sm-students.js?v=6"></script>
+  <script src="sm-classes.js?v=6"></script>
+  <script src="sm-schedule.js?v=6"></script>
+  <script src="sm-attendance.js?v=6"></script>
+  <script src="sm-tuition.js?v=6"></script>
   <script>
     const $ = id => document.getElementById(id);
     let ME = null, SETTINGS = null;
@@ -82,7 +83,7 @@
         ["3", "Lớp học & ghi danh", true],
         ["4", "Lịch tuần & buổi học", true],
         ["5", "Điểm danh", true],
-        ["6", "Học phí & hóa đơn tháng", false],
+        ["6", "Học phí & hóa đơn tháng", true],
         ["7", "Thanh toán & biên nhận", false],
         ["8", "Chuyển lớp / rời lớp", false],
         ["9", "Bảng số liệu tổng quan", false],
@@ -157,6 +158,7 @@
       if (pane === "classes") return Classes.render($("content"), ME);
       if (pane === "schedule") return Schedule.render($("content"), ME);
       if (pane === "attendance") return Attendance.render($("content"), ME);
+      if (pane === "tuition") return Tuition.render($("content"), ME);
       $("content").innerHTML = placeholder(pane);
     }
 

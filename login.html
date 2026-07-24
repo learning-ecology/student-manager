@@ -46,7 +46,15 @@
       if (!email || !pw) return say("Nhập email và mật khẩu.", true);
       $("go").disabled = true; say("Đang đăng nhập…");
       const { data, error } = await sb.auth.signInWithPassword({ email, password: pw });
-      if (error) { $("go").disabled = false; return say("Sai email hoặc mật khẩu.", true); }
+      if (error) {
+        $("go").disabled = false;
+        const m = (error.message || "").toLowerCase();
+        if (m.includes("not confirmed") || m.includes("confirm"))
+          return say("Tài khoản chưa xác nhận email. Chủ trung tâm: tắt 'Confirm email' trong Supabase (Authentication → Providers → Email), hoặc tạo lại tài khoản với 'Auto Confirm'.", true);
+        if (m.includes("invalid login") || m.includes("credentials"))
+          return say("Sai email hoặc mật khẩu.", true);
+        return say("Không đăng nhập được: " + error.message, true);
+      }
       // xác nhận có trong app_users
       const { data: prof } = await sb.from("app_users").select("active").eq("id", data.user.id).maybeSingle();
       if (!prof || !prof.active) { await sb.auth.signOut(); $("go").disabled = false; return say("Tài khoản chưa được cấp quyền vào ứng dụng này.", true); }

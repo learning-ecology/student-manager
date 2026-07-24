@@ -45,6 +45,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="sm-lib.js"></script>
+  <script src="sm-students.js"></script>
   <script>
     const $ = id => document.getElementById(id);
     let ME = null, SETTINGS = null;
@@ -149,6 +150,7 @@
       closeSide();
       if (pane === "settings") return renderSettings();
       if (pane === "dashboard") return renderDashboard();
+      if (pane === "students") return Students.render($("content"), ME);
       $("content").innerHTML = placeholder(pane);
     }
 

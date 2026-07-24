@@ -46,6 +46,7 @@
   <script src="config.js"></script>
   <script src="sm-lib.js"></script>
   <script src="sm-students.js"></script>
+  <script src="sm-classes.js"></script>
   <script>
     const $ = id => document.getElementById(id);
     let ME = null, SETTINGS = null;
@@ -151,6 +152,7 @@
       if (pane === "settings") return renderSettings();
       if (pane === "dashboard") return renderDashboard();
       if (pane === "students") return Students.render($("content"), ME);
+      if (pane === "classes") return Classes.render($("content"), ME);
       $("content").innerHTML = placeholder(pane);
     }
 

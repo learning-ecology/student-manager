@@ -101,6 +101,7 @@ window.Students = (function () {
       <td data-th="Trạng thái"><span class="badge ${STATUS_BADGE[s.status] || "mute"}">${STATUS[s.status] || s.status}</span></td>
       <td data-th="Nhập học">${SM.dmy(s.enrolled_on)}</td>
       <td class="cell-actions"><div class="row-actions">
+        <button class="btn ghost" data-hist="${s.id}">Lịch sử lớp</button>
         <button class="btn ghost" data-edit="${s.id}">Sửa</button>
         ${st.archived
           ? `<button class="btn ghost" data-restore="${s.id}">Khôi phục</button>`
@@ -258,8 +259,9 @@ window.Students = (function () {
     box.onclick = onClick;   // gán (không cộng dồn) để không bị bấm 1 lần chạy nhiều lần
   }
   function onClick(e) {
-    const b = e.target.closest("[data-act],[data-edit],[data-arch],[data-restore]");
+    const b = e.target.closest("[data-act],[data-edit],[data-arch],[data-restore],[data-hist]");
     if (!b) return;
+    if (b.dataset.hist) return historyModal(rows.find(r => r.id === b.dataset.hist));
     if (b.dataset.act === "add") return form(null);
     if (b.dataset.act === "togglearch") { st.archived = !st.archived; st.page = 1; st.status = ""; return load(); }
     if (b.dataset.act === "first") { st.page = 1; return load(); }
@@ -269,6 +271,113 @@ window.Students = (function () {
     if (b.dataset.edit) return form(rows.find(r => r.id === b.dataset.edit));
     if (b.dataset.arch) return archive(b.dataset.arch, true);
     if (b.dataset.restore) return archive(b.dataset.restore, false);
+  }
+
+  /* ============ GĐ8 — Lịch sử lớp học · chuyển lớp · rời lớp ============ */
+  async function historyModal(s) {
+    if (!s) return;
+    const ov = document.createElement("div"); ov.className = "sm-ov";
+    ov.innerHTML = `<div class="sm-modal"><div class="mh"><h3>Lịch sử lớp học · ${SM.esc(s.full_name)}</h3><button class="btn ghost" data-x="close">✕</button></div>
+      <div class="mb"><div class="card placeholder"><span class="spinner"></span></div></div></div>`;
+    document.body.appendChild(ov);
+    ov.addEventListener("click", e => { if (e.target === ov || e.target.dataset.x === "close") ov.remove(); });
+    ov.addEventListener("click", onHist);
+
+    let enrolls = [], transfers = [], classesList = [];
+    const cn = id => (classesList.find(c => c.id === id) || {}).name || "—";
+
+    async function load() {
+      const [enrR, trsR, clsR] = await Promise.all([
+        sb.from("enrollments").select("*").eq("student_id", s.id).order("joined_on"),
+        sb.from("transfers").select("*").eq("student_id", s.id).order("transfer_date"),
+        sb.from("classes").select("id,name,archived_at")
+      ]);
+      enrolls = enrR.data || []; transfers = trsR.data || []; classesList = clsR.data || [];
+      const active = enrolls.filter(e => e.status === "active");
+      const former = enrolls.filter(e => e.status === "former");
+      ov.querySelector(".sm-modal").innerHTML = `
+        <div class="mh"><h3>Lịch sử lớp học · ${SM.esc(s.full_name)}</h3><button class="btn ghost" data-x="close">✕</button></div>
+        <div class="mb">
+          <h4 style="margin:.2rem 0 .4rem;font-family:var(--serif);">Lớp đang học (${active.length})</h4>
+          ${active.length ? active.map(e => `<div class="card" style="padding:.7rem .9rem;margin-bottom:.5rem;display:flex;justify-content:space-between;align-items:center;gap:.6rem;flex-wrap:wrap;">
+              <div><b>${SM.esc(cn(e.class_id))}</b><br><span class="muted" style="font-size:.82rem;">Vào lớp ${SM.dmy(e.joined_on)}${e.tuition_override ? " · học phí riêng " + SM.vnd(e.tuition_override) : ""}${e.discount_percent ? " · giảm " + e.discount_percent + "%" : ""}${e.discount_amount ? " · giảm " + SM.vnd(e.discount_amount) : ""}</span></div>
+              <div class="row-actions">
+                <button class="btn ghost" data-transfer="${e.id}">↔ Chuyển lớp</button>
+                <button class="btn ghost" data-leave="${e.id}" style="color:var(--danger);border-color:var(--danger)">Rời lớp</button>
+              </div></div>`).join("") : `<p class="muted">Chưa học lớp nào. Thêm vào lớp ở mục Lớp học → chọn lớp → Học viên.</p>`}
+          ${former.length ? `<h4 style="margin:1rem 0 .4rem;font-family:var(--serif);">Lớp đã rời (${former.length})</h4>
+            ${former.map(e => `<div class="card" style="padding:.6rem .9rem;margin-bottom:.5rem;opacity:.85;">
+              <b>${SM.esc(cn(e.class_id))}</b> <span class="muted" style="font-size:.82rem;">· ${SM.dmy(e.joined_on)} → ${SM.dmy(e.left_on)}</span>
+              ${e.notes ? `<br><span class="muted" style="font-size:.82rem;">${SM.esc(e.notes)}</span>` : ""}</div>`).join("")}` : ""}
+          ${transfers.length ? `<h4 style="margin:1rem 0 .4rem;font-family:var(--serif);">Lịch sử chuyển lớp (${transfers.length})</h4>
+            <table class="inv-lines">${transfers.slice().reverse().map(t => `<tr>
+              <td style="white-space:nowrap;vertical-align:top;">${SM.dmy(t.transfer_date)}</td>
+              <td>${SM.esc(cn(t.from_class_id))} → <b>${SM.esc(cn(t.to_class_id))}</b>${t.reason ? `<br><span class="muted" style="font-size:.8rem;">${SM.esc(t.reason)}</span>` : ""}</td>
+              <td class="r" style="vertical-align:top;">${t.credit_transferred ? "tín dụng " + SM.vnd(t.credit_transferred) : ""}</td></tr>`).join("")}</table>` : ""}
+        </div>
+        <div class="mf"><button class="btn ghost" data-x="close">Đóng</button></div>`;
+    }
+    function onHist(e) {
+      const b = e.target.closest("[data-transfer],[data-leave]"); if (!b) return;
+      const enr = enrolls.find(x => x.id === (b.dataset.transfer || b.dataset.leave)); if (!enr) return;
+      if (b.dataset.transfer) transferForm(enr, s, classesList, cn, load);
+      else leaveForm(enr, s, cn, load);
+    }
+    await load();
+  }
+
+  function transferForm(enr, s, classesList, cn, refresh) {
+    const others = classesList.filter(c => c.id !== enr.class_id && !c.archived_at);
+    const ov = document.createElement("div"); ov.className = "sm-ov";
+    ov.innerHTML = `<div class="sm-modal" style="max-width:470px;"><div class="mh"><h3>Chuyển lớp · ${SM.esc(s.full_name)}</h3><button class="btn ghost" data-x="close">✕</button></div>
+      <div class="mb"><div class="grid2">
+        <div class="field"><label>Từ lớp</label><input value="${SM.esc(cn(enr.class_id))}" disabled></div>
+        <div class="field"><label>Sang lớp *</label><select id="tf-to"><option value="">— chọn lớp —</option>${others.map(c => `<option value="${c.id}">${SM.esc(c.name)}</option>`).join("")}</select></div>
+        <div class="field"><label>Ngày chuyển (DD/MM/YYYY)</label><input id="tf-date" value="${SM.dmy(SM.todayISO())}"></div>
+        <div class="field"><label>Tín dụng chuyển theo (VND)</label><input id="tf-credit" type="number" min="0" value="0"></div>
+        <div class="field" style="grid-column:1/-1"><label>Lý do</label><input id="tf-reason" placeholder="vd: đổi lịch học, nâng trình độ…"></div>
+      </div>
+      <p class="muted" style="font-size:.83rem;">Kết thúc ghi danh lớp cũ (giữ nguyên lịch sử điểm danh & học phí) và mở ghi danh lớp mới từ ngày chuyển. Học phí tháng chuyển tự tách theo ngày. Số dư/tín dụng của học viên vốn áp dụng cho mọi lớp.</p></div>
+      <div class="mf"><button class="btn ghost" data-x="close">Hủy</button><button class="btn" id="tf-go">↔ Chuyển lớp</button><span class="msg" id="tf-msg" style="align-self:center"></span></div></div>`;
+    document.body.appendChild(ov);
+    ov.addEventListener("click", e => { if (e.target === ov || e.target.dataset.x === "close") ov.remove(); });
+    ov.querySelector("#tf-go").addEventListener("click", async () => {
+      const say = (t, er) => { const m = ov.querySelector("#tf-msg"); m.textContent = t; m.className = "msg" + (er ? " err" : ""); };
+      const to = ov.querySelector("#tf-to").value; if (!to) return say("Chọn lớp mới.", true);
+      const date = SM.parseDmy(ov.querySelector("#tf-date").value.trim()); if (!date) return say("Ngày chuyển không hợp lệ.", true);
+      if (date < enr.joined_on) return say("Ngày chuyển phải sau ngày vào lớp cũ (" + SM.dmy(enr.joined_on) + ").", true);
+      const credit = Math.max(0, parseInt(ov.querySelector("#tf-credit").value, 10) || 0);
+      const reason = ov.querySelector("#tf-reason").value.trim();
+      ov.querySelector("#tf-go").disabled = true;
+      const { error } = await sb.rpc("transfer_student", { p_student: s.id, p_from_class: enr.class_id, p_to_class: to, p_date: date, p_reason: reason, p_credit: credit, p_notes: "" });
+      if (error) { ov.querySelector("#tf-go").disabled = false; return say("Lỗi chuyển: " + error.message, true); }
+      ov.remove(); SM.toast("✓ Đã chuyển lớp", "ok"); refresh();
+    });
+  }
+
+  function leaveForm(enr, s, cn, refresh) {
+    const ov = document.createElement("div"); ov.className = "sm-ov";
+    ov.innerHTML = `<div class="sm-modal" style="max-width:440px;"><div class="mh"><h3>Rời lớp · ${SM.esc(s.full_name)}</h3><button class="btn ghost" data-x="close">✕</button></div>
+      <div class="mb">
+        <p style="margin:.1rem 0 .6rem;">Kết thúc ghi danh của <b>${SM.esc(s.full_name)}</b> ở lớp <b>${SM.esc(cn(enr.class_id))}</b>. Lịch sử điểm danh & học phí vẫn được giữ.</p>
+        <div class="field"><label>Ngày rời lớp (DD/MM/YYYY) *</label><input id="lv-date" value="${SM.dmy(SM.todayISO())}"></div>
+        <div class="field"><label>Lý do</label><input id="lv-reason" placeholder="vd: chuyển trường, nghỉ dài hạn…"></div>
+        <p class="muted" style="font-size:.83rem;">Học phí chỉ tính các buổi đến ngày rời lớp. Hóa đơn <b>đã chốt</b> (nếu có) cần điều chỉnh tay ở mục Thanh toán.</p>
+      </div>
+      <div class="mf"><button class="btn ghost" data-x="close">Hủy</button><button class="btn danger" id="lv-go">Rời lớp</button><span class="msg" id="lv-msg" style="align-self:center"></span></div></div>`;
+    document.body.appendChild(ov);
+    ov.addEventListener("click", e => { if (e.target === ov || e.target.dataset.x === "close") ov.remove(); });
+    ov.querySelector("#lv-go").addEventListener("click", async () => {
+      const say = (t, er) => { const m = ov.querySelector("#lv-msg"); m.textContent = t; m.className = "msg" + (er ? " err" : ""); };
+      const date = SM.parseDmy(ov.querySelector("#lv-date").value.trim()); if (!date) return say("Ngày không hợp lệ.", true);
+      if (date < enr.joined_on) return say("Ngày rời phải sau ngày vào lớp (" + SM.dmy(enr.joined_on) + ").", true);
+      const reason = ov.querySelector("#lv-reason").value.trim();
+      const noteVal = (enr.notes ? enr.notes + " · " : "") + "Rời lớp " + SM.dmy(date) + (reason ? ": " + reason : "");
+      ov.querySelector("#lv-go").disabled = true;
+      const { error } = await sb.from("enrollments").update({ status: "former", left_on: date, notes: noteVal }).eq("id", enr.id);
+      if (error) { ov.querySelector("#lv-go").disabled = false; return say("Lỗi: " + error.message, true); }
+      ov.remove(); SM.toast("✓ Đã cho rời lớp", "ok"); refresh();
+    });
   }
 
   return {

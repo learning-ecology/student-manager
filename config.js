@@ -7,7 +7,7 @@
 //   • publishable/anon key → dán vào SM_KEY  (AN TOÀN để công khai)
 //  TUYỆT ĐỐI không dán khóa service_role vào đây.
 // ------------------------------------------------------------
-const SM_URL = "https://ĐIỀN-PROJECT-REF.supabase.co";
-const SM_KEY = "ĐIỀN-PUBLISHABLE-KEY";
+const SM_URL = "https://zrmgunriwvcjppjykngk.supabase.co";
+const SM_KEY = "sb_publishable_bnFLg0D6eTxXjyzotw4hQg_43doAVoU";
 
 const sb = supabase.createClient(SM_URL, SM_KEY);

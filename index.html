@@ -47,6 +47,7 @@
   <script src="sm-lib.js"></script>
   <script src="sm-students.js"></script>
   <script src="sm-classes.js"></script>
+  <script src="sm-schedule.js"></script>
   <script>
     const $ = id => document.getElementById(id);
     let ME = null, SETTINGS = null;
@@ -76,9 +77,9 @@
       const dun = "✅", cho = "⏳";
       const steps = [
         ["1", "Đăng nhập, khung ứng dụng, Cài đặt", true],
-        ["2", "Quản lý học viên", false],
-        ["3", "Lớp học & ghi danh", false],
-        ["4", "Lịch tuần & buổi học", false],
+        ["2", "Quản lý học viên", true],
+        ["3", "Lớp học & ghi danh", true],
+        ["4", "Lịch tuần & buổi học", true],
         ["5", "Điểm danh", false],
         ["6", "Học phí & hóa đơn tháng", false],
         ["7", "Thanh toán & biên nhận", false],
@@ -153,6 +154,7 @@
       if (pane === "dashboard") return renderDashboard();
       if (pane === "students") return Students.render($("content"), ME);
       if (pane === "classes") return Classes.render($("content"), ME);
+      if (pane === "schedule") return Schedule.render($("content"), ME);
       $("content").innerHTML = placeholder(pane);
     }
 

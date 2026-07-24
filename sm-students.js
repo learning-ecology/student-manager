@@ -255,7 +255,7 @@ window.Students = (function () {
     if (fs) fs.addEventListener("change", () => { st.status = fs.value; st.page = 1; load(); });
     const per = box.querySelector("#per");
     if (per) per.addEventListener("change", () => { st.per = +per.value; st.page = 1; load(); });
-    box.addEventListener("click", onClick);
+    box.onclick = onClick;   // gán (không cộng dồn) để không bị bấm 1 lần chạy nhiều lần
   }
   function onClick(e) {
     const b = e.target.closest("[data-act],[data-edit],[data-arch],[data-restore]");

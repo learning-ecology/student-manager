@@ -136,7 +136,7 @@ window.Classes = (function () {
           ${Object.entries(METHOD).map(([k, v]) => `<option value="${k}" ${g("tuition_method", "per_scheduled") === k ? "selected" : ""}>${v}</option>`).join("")}</select></div>
         <div class="field"><label>Mức học phí (VND)</label><input id="c-fee" type="number" min="0" value="${g("tuition_amount", 0)}"></div>
         <div class="field" style="grid-column:1/-1"><label>Ghi chú</label><textarea id="c-notes" style="min-height:56px">${SM.esc(g("notes"))}</textarea></div>
-      </div><p class="muted" style="font-size:.85rem">Lịch học hằng tuần sẽ cấu hình ở giai đoạn 4.</p></div>
+      </div><p class="muted" style="font-size:.85rem">Lịch học hằng tuần: cấu hình ở mục 🗓️ Lịch học → thẻ "Lịch tuần &amp; sinh buổi".</p></div>
       <div class="mf"><button class="btn ghost" data-x="close">Hủy</button><button class="btn" id="c-save">💾 Lưu</button>
         <span class="msg" id="c-msg" style="align-self:center"></span></div></div>`;
     document.body.appendChild(ov);
@@ -347,7 +347,7 @@ window.Classes = (function () {
     const q = box.querySelector("#q"); if (q) q.addEventListener("input", () => { clearTimeout(deb); deb = setTimeout(() => { stL.q = q.value; stL.page = 1; loadClasses(); }, 300); });
     const fs = box.querySelector("#fstatus"); if (fs) fs.addEventListener("change", () => { stL.status = fs.value; stL.page = 1; loadClasses(); });
     const per = box.querySelector("#per"); if (per) per.addEventListener("change", () => { stL.per = +per.value; stL.page = 1; loadClasses(); });
-    box.addEventListener("click", onListClick);
+    box.onclick = onListClick;   // gán (không cộng dồn) để không bị bấm 1 lần chạy nhiều lần
   }
   function onListClick(e) {
     const b = e.target.closest("[data-act],[data-edit],[data-arch],[data-restore],[data-dup],[data-roster]"); if (!b) return;
@@ -370,7 +370,7 @@ window.Classes = (function () {
       paintRoster();
     });
     box.querySelectorAll("[data-sel]").forEach(cb => cb.addEventListener("change", () => { cb.checked ? sel.add(cb.dataset.sel) : sel.delete(cb.dataset.sel); paintRoster(); }));
-    box.addEventListener("click", onRosterClick);
+    box.onclick = onRosterClick;   // gán (không cộng dồn) để không bị bấm 1 lần chạy nhiều lần
   }
   function onRosterClick(e) {
     const b = e.target.closest("[data-act],[data-transfer],[data-remove]"); if (!b) return;

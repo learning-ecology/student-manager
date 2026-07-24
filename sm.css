@@ -160,6 +160,28 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--accent-soft);bor
   .cal-month{gap:.2rem;} .cal-cell{min-height:56px;}
 }
 
+/* ---- điểm danh (GĐ5) ---- */
+.att-row{display:flex;align-items:center;justify-content:space-between;gap:.8rem 1rem;flex-wrap:wrap;padding:.55rem .1rem;border-bottom:1px solid var(--line);}
+.att-row:last-child{border-bottom:0;}
+.att-who{display:flex;align-items:center;gap:.6rem;min-width:190px;flex:1;}
+.att-who b{line-height:1.2;}
+.att-seg{display:inline-flex;flex-wrap:wrap;gap:.3rem;align-items:center;}
+.att-seg button{padding:.34rem .6rem;border:1px solid var(--line);background:var(--card);border-radius:8px;font-size:.8rem;color:var(--muted);font-weight:700;}
+.att-seg button:hover{border-color:var(--accent);color:var(--accent);}
+.att-seg button.on{color:#fff;}
+.att-seg button.on.ok{background:var(--good);border-color:var(--good);}
+.att-seg button.on.warn{background:var(--warn);border-color:var(--warn);}
+.att-seg button.on.bad{background:var(--danger);border-color:var(--danger);}
+.att-seg button.on.mute{background:var(--muted);border-color:var(--muted);}
+.att-seg .att-note-btn{color:var(--muted);}
+.att-savebar{position:sticky;bottom:0;background:color-mix(in srgb,var(--paper) 90%,transparent);backdrop-filter:blur(6px);
+  display:flex;align-items:center;justify-content:flex-end;gap:.6rem;padding:.8rem .2rem;margin-top:.6rem;border-top:1px solid var(--line);}
+.att-savebar .msg{margin-right:auto;}
+@media(max-width:620px){
+  .att-row{align-items:flex-start;}
+  .att-seg{width:100%;}
+}
+
 /* auth page */
 .auth-wrap{min-height:100vh;display:grid;place-items:center;padding:1.2rem;
   background:linear-gradient(135deg,#eaf1fb,#f6f1e8);}

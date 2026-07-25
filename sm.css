@@ -193,6 +193,12 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--accent-soft);bor
 .inv-lines tr.tot td{font-weight:800;font-size:1.05rem;border-bottom:0;padding-top:.2rem;}
 .inv-lines tr:last-child td{border-bottom:0;}
 
+/* ---- biểu ngữ đăng nhập hộ (impersonate) ---- */
+.imp-bar{position:fixed;left:0;right:0;bottom:0;z-index:200;background:var(--gold);color:#fff;
+  text-align:center;padding:.5rem 1rem;font-size:.9rem;box-shadow:0 -6px 20px -12px rgba(0,0,0,.5);}
+.imp-bar .btn.ghost{color:#fff;border-color:rgba(255,255,255,.6);}
+.imp-bar .btn.ghost:hover{background:rgba(255,255,255,.15);}
+
 /* ---- nhắc nhở dashboard (GĐ9) ---- */
 .reminders{display:flex;flex-direction:column;gap:.5rem;}
 .rem{display:flex;align-items:center;gap:.7rem;padding:.7rem .9rem;border-radius:10px;border:1px solid var(--line);background:var(--card);text-decoration:none;color:inherit;}

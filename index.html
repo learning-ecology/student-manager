@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Quản lý học viên</title>
-  <link rel="stylesheet" href="sm.css?v=14">
+  <link rel="stylesheet" href="sm.css?v=15">
   <script>try{if(localStorage.getItem("sm_theme")==="dark")document.documentElement.setAttribute("data-theme","dark");}catch(e){}</script>
 </head>
 <body>
@@ -24,6 +24,7 @@
         <div class="grp">Khác</div>
         <a href="#reports" data-nav="reports"><span class="ic">📈</span> Báo cáo</a>
         <a href="#audit" data-nav="audit"><span class="ic">📜</span> Nhật ký</a>
+        <a href="#tenants" data-nav="tenants" id="navTenants" hidden><span class="ic">🏢</span> Quản lý giáo viên</a>
         <a href="#settings" data-nav="settings"><span class="ic">⚙️</span> Cài đặt</a>
       </nav>
     </aside>
@@ -44,17 +45,18 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=14"></script>
-  <script src="sm-lib.js?v=14"></script>
-  <script src="sm-students.js?v=14"></script>
-  <script src="sm-classes.js?v=14"></script>
-  <script src="sm-schedule.js?v=14"></script>
-  <script src="sm-attendance.js?v=14"></script>
-  <script src="sm-tuition.js?v=14"></script>
-  <script src="sm-payments.js?v=14"></script>
-  <script src="sm-dashboard.js?v=14"></script>
-  <script src="sm-reports.js?v=14"></script>
-  <script src="sm-audit.js?v=14"></script>
+  <script src="config.js?v=15"></script>
+  <script src="sm-lib.js?v=15"></script>
+  <script src="sm-students.js?v=15"></script>
+  <script src="sm-classes.js?v=15"></script>
+  <script src="sm-schedule.js?v=15"></script>
+  <script src="sm-attendance.js?v=15"></script>
+  <script src="sm-tuition.js?v=15"></script>
+  <script src="sm-payments.js?v=15"></script>
+  <script src="sm-dashboard.js?v=15"></script>
+  <script src="sm-reports.js?v=15"></script>
+  <script src="sm-audit.js?v=15"></script>
+  <script src="sm-tenants.js?v=15"></script>
   <script>
     const $ = id => document.getElementById(id);
     let ME = null, SETTINGS = null;
@@ -84,7 +86,7 @@
 
     async function renderSettings() {
       $("content").innerHTML = `<h1>Cài đặt</h1><div class="card placeholder"><span class="spinner"></span></div>`;
-      const { data: s } = await sb.from("settings").select("*").eq("id", 1).maybeSingle();
+      const { data: s } = await sb.from("settings").select("*").limit(1).maybeSingle();
       SETTINGS = s || SETTINGS || {};
       const owner = ME.profile.role === "owner";
       $("content").innerHTML = `
@@ -110,7 +112,7 @@
         const name = $("st-name").value.trim();
         const billing = Math.min(28, Math.max(1, parseInt($("st-billing").value, 10) || 1));
         $("st-save").disabled = true;
-        const { error } = await sb.from("settings").update({ center_name: name, billing_day: billing, updated_at: new Date().toISOString() }).eq("id", 1);
+        const { error } = await sb.from("settings").upsert({ tenant_id: ME.profile.tenant_id, center_name: name, billing_day: billing, updated_at: new Date().toISOString() }, { onConflict: "tenant_id" });
         $("st-save").disabled = false;
         if (error) { msg.textContent = "Không lưu được: " + error.message; msg.className = "msg err"; return; }
         SETTINGS.center_name = name; SETTINGS.billing_day = billing;
@@ -134,6 +136,7 @@
       if (pane === "payments") return Payments.render($("content"), ME);
       if (pane === "reports") return Reports.render($("content"), ME);
       if (pane === "audit") return Audit.render($("content"), ME);
+      if (pane === "tenants") return Tenants.render($("content"), ME);
       $("content").innerHTML = placeholder(pane);
     }
 
@@ -154,10 +157,23 @@
     (async function start() {
       ME = await SM.requireAuth();
       if (!ME) return;                       // redirected to login
-      const { data: s } = await sb.from("settings").select("*").eq("id", 1).maybeSingle();
+      // settings theo tenant (RLS tự lọc → mỗi workspace 1 dòng)
+      const { data: s } = await sb.from("settings").select("*").limit(1).maybeSingle();
       SETTINGS = s || { center_name: "Quản lý học viên", billing_day: 1 };
       $("brandName").textContent = SETTINGS.center_name || "Quản lý học viên";
       $("whoName").textContent = (ME.profile.full_name || ME.user.email) + " · " + SM.roleLabel(ME.profile.role);
+      // mục "Quản lý giáo viên" chỉ hiện với chủ nền tảng
+      if (ME.profile.is_platform_owner) $("navTenants").hidden = false;
+      // biểu ngữ khi đang đăng nhập hộ (impersonate)
+      try {
+        const imp = sessionStorage.getItem("sm_impersonate");
+        if (imp) {
+          const bar = document.createElement("div"); bar.className = "imp-bar";
+          bar.innerHTML = `👁️ Đang xem với tư cách <b>${SM.esc(imp)}</b> — <button class="btn ghost" id="impExit" style="padding:.2rem .6rem;">Thoát</button>`;
+          document.body.appendChild(bar);
+          document.getElementById("impExit").addEventListener("click", async () => { sessionStorage.removeItem("sm_impersonate"); await sb.auth.signOut(); location.href = "login.html"; });
+        }
+      } catch (e) {}
       $("app").hidden = false;
       route();
     })();

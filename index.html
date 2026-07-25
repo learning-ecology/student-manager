@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Quản lý học viên</title>
-  <link rel="stylesheet" href="sm.css?v=8">
+  <link rel="stylesheet" href="sm.css?v=9">
   <script>try{if(localStorage.getItem("sm_theme")==="dark")document.documentElement.setAttribute("data-theme","dark");}catch(e){}</script>
 </head>
 <body>
@@ -43,14 +43,15 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=8"></script>
-  <script src="sm-lib.js?v=8"></script>
-  <script src="sm-students.js?v=8"></script>
-  <script src="sm-classes.js?v=8"></script>
-  <script src="sm-schedule.js?v=8"></script>
-  <script src="sm-attendance.js?v=8"></script>
-  <script src="sm-tuition.js?v=8"></script>
-  <script src="sm-payments.js?v=8"></script>
+  <script src="config.js?v=9"></script>
+  <script src="sm-lib.js?v=9"></script>
+  <script src="sm-students.js?v=9"></script>
+  <script src="sm-classes.js?v=9"></script>
+  <script src="sm-schedule.js?v=9"></script>
+  <script src="sm-attendance.js?v=9"></script>
+  <script src="sm-tuition.js?v=9"></script>
+  <script src="sm-payments.js?v=9"></script>
+  <script src="sm-dashboard.js?v=9"></script>
   <script>
     const $ = id => document.getElementById(id);
     let ME = null, SETTINGS = null;
@@ -75,41 +76,8 @@
         </div>`;
     }
 
-    function renderDashboard() {
-      // GĐ1: màn hình chào + tiến độ. Các thẻ số liệu sẽ "sống" ở GĐ9.
-      const dun = "✅", cho = "⏳";
-      const steps = [
-        ["1", "Đăng nhập, khung ứng dụng, Cài đặt", true],
-        ["2", "Quản lý học viên", true],
-        ["3", "Lớp học & ghi danh", true],
-        ["4", "Lịch tuần & buổi học", true],
-        ["5", "Điểm danh", true],
-        ["6", "Học phí & hóa đơn tháng", true],
-        ["7", "Thanh toán & biên nhận", true],
-        ["8", "Chuyển lớp / rời lớp", true],
-        ["9", "Bảng số liệu tổng quan", false],
-        ["10", "Báo cáo & xuất file", false],
-        ["11", "Nhập học viên hàng loạt", false],
-        ["12", "Nhật ký, hoàn thiện", false]
-      ];
-      $("content").innerHTML = `
-        <h1>Xin chào${ME.profile.full_name ? ", " + SM.esc(ME.profile.full_name) : ""} 👋</h1>
-        <div class="card" style="padding:1.2rem;margin-bottom:1rem;">
-          <p style="margin:.1rem 0;">Đây là hệ thống <b>${SM.esc(SETTINGS.center_name || "Quản lý học viên")}</b> —
-            độc lập, dữ liệu lưu an toàn trên cơ sở dữ liệu riêng.</p>
-          <p class="muted" style="margin:.3rem 0 0;">Ngày ${SM.dmy(SM.todayISO())} · múi giờ ${SM.TZ} · tiền tệ VND.</p>
-        </div>
-        <h2 style="font-size:1.1rem;margin:.4rem 0 .6rem;">Tiến độ xây dựng</h2>
-        <div class="card" style="padding:1rem 1.2rem;">
-          ${steps.map(([n, t, d]) => `
-            <div style="display:flex;gap:.7rem;align-items:center;padding:.35rem 0;border-bottom:1px solid var(--line);">
-              <span style="width:26px;">${d ? dun : cho}</span>
-              <b style="width:34px;color:var(--muted);">GĐ${n}</b>
-              <span>${SM.esc(t)}</span>
-              ${d ? '<span class="badge ok" style="margin-left:auto;">Hoàn thành</span>' : '<span class="badge mute" style="margin-left:auto;">Sắp tới</span>'}
-            </div>`).join("")}
-        </div>`;
-    }
+    // GĐ9: bảng số liệu tổng quan sống ở module Dashboard (sm-dashboard.js)
+    function renderDashboard() { return Dashboard.render($("content"), ME); }
 
     async function renderSettings() {
       $("content").innerHTML = `<h1>Cài đặt</h1><div class="card placeholder"><span class="spinner"></span></div>`;

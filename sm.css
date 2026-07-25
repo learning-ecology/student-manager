@@ -190,6 +190,14 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--accent-soft);bor
 .inv-lines tr.tot td{font-weight:800;font-size:1.05rem;border-bottom:0;padding-top:.2rem;}
 .inv-lines tr:last-child td{border-bottom:0;}
 
+/* ---- nhắc nhở dashboard (GĐ9) ---- */
+.reminders{display:flex;flex-direction:column;gap:.5rem;}
+.rem{display:flex;align-items:center;gap:.7rem;padding:.7rem .9rem;border-radius:10px;border:1px solid var(--line);background:var(--card);text-decoration:none;color:inherit;}
+.rem:hover{border-color:var(--accent);background:var(--accent-soft);}
+.rem .ic{font-size:1.2rem;flex:none;}
+.rem .txt{flex:1;min-width:0;}
+.rem .go{color:var(--accent);font-weight:600;font-size:.85rem;white-space:nowrap;}
+
 /* ---- biên nhận (in) — GĐ7 ---- */
 .receipt-print{padding:.3rem .2rem;color:#111;}
 body.printing *{visibility:hidden !important;}

@@ -15,6 +15,7 @@ window.Classes = (function () {
   const CSTATUS = { planned: "Sắp mở", active: "Đang học", completed: "Đã kết thúc" };
   const CBADGE = { planned: "warn", active: "ok", completed: "mute" };
   const METHOD = { per_scheduled: "Theo buổi có lịch", per_attended: "Theo buổi học thực tế",
+                   per_cycle: "Theo chu kỳ (mỗi X buổi)",
                    fixed_monthly: "Cố định mỗi tháng", fixed_course: "Trọn khóa", custom: "Tùy học viên" };
   const tName = id => (teachers.find(t => t.id === id) || {}).full_name || "—";
   const cls = id => classes.find(c => c.id === id) || {};
@@ -134,7 +135,10 @@ window.Classes = (function () {
         <div class="field"><label>Ngày kết thúc dự kiến</label><input id="c-end" value="${c.end_date ? SM.dmy(c.end_date) : ""}"></div>
         <div class="field"><label>Cách tính học phí</label><select id="c-method">
           ${Object.entries(METHOD).map(([k, v]) => `<option value="${k}" ${g("tuition_method", "per_scheduled") === k ? "selected" : ""}>${v}</option>`).join("")}</select></div>
-        <div class="field"><label>Mức học phí (VND)</label><input id="c-fee" type="number" min="0" value="${g("tuition_amount", 0)}"></div>
+        <div class="field"><label>Mức học phí (VND) <span class="muted" style="font-weight:400">— mỗi buổi nếu tính theo buổi/chu kỳ</span></label><input id="c-fee" type="number" min="0" value="${g("tuition_amount", 0)}"></div>
+        <div class="field"><label>Số buổi / chu kỳ <span class="muted" style="font-weight:400">— khi tính theo chu kỳ</span></label><input id="c-cycle" type="number" min="1" value="${g("billing_cycle", "")}" placeholder="vd 12"></div>
+        <div class="field"><label>Ngày bắt đầu tính phí (DD/MM/YYYY)</label><input id="c-billstart" value="${c.billing_start ? SM.dmy(c.billing_start) : ""}" placeholder="mặc định = đầu tháng"></div>
+        <div class="field" style="grid-column:1/-1"><label style="display:flex;align-items:center;gap:.5rem;font-weight:600;"><input type="checkbox" id="c-billfuture" ${g("billing_include_future", true) ? "checked" : ""} style="width:auto"> Mặc định tính cả buổi tương lai khi tạo hóa đơn</label></div>
         <div class="field" style="grid-column:1/-1"><label>Ghi chú</label><textarea id="c-notes" style="min-height:56px">${SM.esc(g("notes"))}</textarea></div>
       </div><p class="muted" style="font-size:.85rem">Lịch học hằng tuần: cấu hình ở mục 🗓️ Lịch học → thẻ "Lịch tuần &amp; sinh buổi".</p></div>
       <div class="mf"><button class="btn ghost" data-x="close">Hủy</button><button class="btn" id="c-save">💾 Lưu</button>
@@ -164,12 +168,17 @@ window.Classes = (function () {
     const end = ed ? SM.parseDmy(ed) : null; if (ed && !end) return say("Ngày kết thúc không hợp lệ.", true);
     if (start && end && end < start) return say("Ngày kết thúc phải sau ngày bắt đầu.", true);
     const maxRaw = V("c-max").trim();
+    const cycleRaw = V("c-cycle").trim();
+    const bsRaw = V("c-billstart").trim();
+    const billStart = bsRaw ? SM.parseDmy(bsRaw) : null; if (bsRaw && !billStart) return say("Ngày bắt đầu tính phí không hợp lệ.", true);
     const row = {
       name, subject: V("c-subject").trim(), teacher_id: V("c-teacher") || null,
       room: V("c-room").trim(), online_link: V("c-link").trim(),
       max_students: maxRaw === "" ? null : Math.max(1, parseInt(maxRaw, 10) || 1),
       status: V("c-status"), start_date: start, end_date: end,
       tuition_method: V("c-method"), tuition_amount: Math.max(0, parseInt(V("c-fee"), 10) || 0),
+      billing_cycle: cycleRaw === "" ? null : Math.max(1, parseInt(cycleRaw, 10) || 1),
+      billing_start: billStart, billing_include_future: ov.querySelector("#c-billfuture").checked,
       notes: V("c-notes").trim(), updated_at: new Date().toISOString()
     };
     ov.querySelector("#c-save").disabled = true;

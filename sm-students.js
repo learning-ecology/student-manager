@@ -51,7 +51,7 @@ window.Students = (function () {
     box.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;">
         <h1 style="margin:.2rem 0;">Học viên ${st.archived ? "· <span class='muted' style='font-size:1rem'>Đã lưu trữ</span>" : ""}</h1>
-        ${!st.archived ? `<button class="btn" data-act="add">➕ Thêm học viên</button>` : ""}
+        ${!st.archived ? `<div class="row-actions"><button class="btn ghost" data-act="import">📥 Nhập hàng loạt</button><button class="btn" data-act="add">➕ Thêm học viên</button></div>` : ""}
       </div>
       <div class="toolbar">
         <div class="field" style="min-width:240px;flex:1;"><label>Tìm (tên, SĐT, mã, SĐT phụ huynh)</label>
@@ -263,6 +263,7 @@ window.Students = (function () {
     if (!b) return;
     if (b.dataset.hist) return historyModal(rows.find(r => r.id === b.dataset.hist));
     if (b.dataset.act === "add") return form(null);
+    if (b.dataset.act === "import") return importModal();
     if (b.dataset.act === "togglearch") { st.archived = !st.archived; st.page = 1; st.status = ""; return load(); }
     if (b.dataset.act === "first") { st.page = 1; return load(); }
     if (b.dataset.act === "prev") { st.page--; return load(); }
@@ -380,7 +381,156 @@ window.Students = (function () {
     });
   }
 
+  /* ============ GĐ11 — Nhập học viên hàng loạt (CSV / dán) ============ */
+  const IMP_COLS = ["full_name", "dob", "gender", "phone", "email", "guardian_name", "guardian_phone", "address", "enrolled_on", "notes"];
+  const normPhone = s => String(s || "").replace(/[^\d]/g, "");
+  const normName = s => String(s || "").trim().toLowerCase().replace(/\s+/g, " ");
+  function mapGender(v) {
+    v = (v || "").trim().toLowerCase();
+    if (!v) return { ok: true, val: null };
+    if (["nam", "male", "m", "trai", "boy"].includes(v)) return { ok: true, val: "male" };
+    if (["nữ", "nu", "female", "f", "gái", "gai", "girl"].includes(v)) return { ok: true, val: "female" };
+    if (["khác", "khac", "other", "o"].includes(v)) return { ok: true, val: "other" };
+    return { ok: false };
+  }
+  function parseDelimited(text, delim) {
+    const rows = []; let row = [], field = "", inQ = false;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (inQ) {
+        if (c === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else inQ = false; }
+        else field += c;
+      } else if (c === '"') inQ = true;
+      else if (c === delim) { row.push(field); field = ""; }
+      else if (c === '\n') { row.push(field); rows.push(row); row = []; field = ""; }
+      else if (c !== '\r') field += c;
+    }
+    if (field !== "" || row.length) { row.push(field); rows.push(row); }
+    return rows;
+  }
+  async function parseAndValidate(text) {
+    const delim = text.includes("\t") ? "\t" : ",";
+    let rows = parseDelimited(text, delim).filter(r => r.some(c => (c || "").trim() !== ""));
+    if (rows.length) {
+      const first = (rows[0][0] || "").trim().toLowerCase();
+      if (/họ tên|ho ten|^tên$|^name$|fullname|học viên/.test(first)) rows = rows.slice(1);
+    }
+    const { data: existing } = await sb.from("students").select("full_name,phone");
+    const exPhone = new Set(), exName = new Set();
+    (existing || []).forEach(s => { if (s.phone) exPhone.add(normPhone(s.phone)); if (s.full_name) exName.add(normName(s.full_name)); });
+    const seenPhone = new Set(), seenName = new Set();
+    const today = SM.todayISO();
+    return rows.map(cells => {
+      const raw = {}; IMP_COLS.forEach((k, i) => raw[k] = (cells[i] || "").trim());
+      if (!raw.full_name) return { raw, status: "error", msg: "Thiếu họ tên" };
+      let dob = null;
+      if (raw.dob) { dob = SM.parseDmy(raw.dob); if (!dob) return { raw, status: "error", msg: "Ngày sinh sai (DD/MM/YYYY)" }; }
+      const g = mapGender(raw.gender); if (!g.ok) return { raw, status: "error", msg: "Giới tính phải là Nam/Nữ/Khác" };
+      if (raw.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(raw.email)) return { raw, status: "error", msg: "Email không hợp lệ" };
+      let enrolled = today;
+      if (raw.enrolled_on) { enrolled = SM.parseDmy(raw.enrolled_on); if (!enrolled) return { raw, status: "error", msg: "Ngày nhập học sai (DD/MM/YYYY)" }; }
+      const np = normPhone(raw.phone), nn = normName(raw.full_name);
+      let dupMsg = "";
+      if (np && (exPhone.has(np) || seenPhone.has(np))) dupMsg = "Trùng SĐT";
+      else if (exName.has(nn) || seenName.has(nn)) dupMsg = "Trùng họ tên";
+      if (np) seenPhone.add(np); seenName.add(nn);
+      const row = { full_name: raw.full_name, dob, gender: g.val, phone: raw.phone, email: raw.email,
+        guardian_name: raw.guardian_name, guardian_phone: raw.guardian_phone, address: raw.address,
+        enrolled_on: enrolled, status: "active", notes: raw.notes };
+      return dupMsg ? { raw, status: "dup", msg: dupMsg, row } : { raw, status: "ok", msg: "", row };
+    });
+  }
+
+  function importModal() {
+    const ov = document.createElement("div"); ov.className = "sm-ov";
+    ov.innerHTML = `<div class="sm-modal"><div class="mh"><h3>📥 Nhập học viên hàng loạt</h3><button class="btn ghost" data-x="close">✕</button></div>
+      <div class="mb" id="imp-body"></div></div>`;
+    document.body.appendChild(ov);
+    ov.addEventListener("click", e => { if (e.target === ov || e.target.dataset.x === "close") ov.remove(); });
+    const body = ov.querySelector("#imp-body");
+    let parsed = [];
+
+    function step1() {
+      body.innerHTML = `
+        <p class="muted" style="margin:.1rem 0 .6rem;font-size:.88rem;">Dán dữ liệu từ Excel/Google Sheets (mỗi học viên một dòng) hoặc chọn tệp CSV. Thứ tự cột:</p>
+        <div class="card" style="padding:.5rem .7rem;font-size:.8rem;overflow-x:auto;white-space:nowrap;margin-bottom:.5rem;">
+          <b>Họ tên</b> · Ngày sinh (DD/MM/YYYY) · Giới tính (Nam/Nữ) · SĐT · Email · Tên phụ huynh · SĐT phụ huynh · Địa chỉ · Ngày nhập học · Ghi chú</div>
+        <p class="muted" style="font-size:.82rem;margin:0 0 .5rem;">Chỉ <b>Họ tên</b> bắt buộc; các cột sau có thể để trống hoặc lược bớt. Dòng tiêu đề (nếu có) tự bỏ qua.</p>
+        <textarea id="imp-text" style="min-height:150px;font-family:ui-monospace,monospace;font-size:.82rem;" placeholder="Nguyễn Văn An&#9;01/09/2010&#9;Nam&#9;0901234567&#10;Trần Thị Bích&#9;15/03/2011&#9;Nữ&#9;0912345678"></textarea>
+        <div class="toolbar" style="margin-top:.5rem;align-items:center;">
+          <label class="btn ghost" style="cursor:pointer;">📄 Chọn tệp CSV<input type="file" id="imp-file" accept=".csv,.tsv,.txt" hidden></label>
+          <span style="flex:1"></span>
+          <button class="btn" id="imp-preview">Xem trước →</button>
+        </div>
+        <p class="msg" id="imp-msg"></p>`;
+      body.querySelector("#imp-file").addEventListener("change", async e => {
+        const f = e.target.files[0]; if (!f) return;
+        body.querySelector("#imp-text").value = await f.text();
+      });
+      body.querySelector("#imp-preview").addEventListener("click", async () => {
+        const text = body.querySelector("#imp-text").value;
+        if (!text.trim()) { const m = body.querySelector("#imp-msg"); m.textContent = "Chưa có dữ liệu."; m.className = "msg err"; return; }
+        body.innerHTML = `<div class="card placeholder"><span class="spinner"></span></div>`;
+        parsed = await parseAndValidate(text);
+        step2();
+      });
+    }
+
+    function step2() {
+      const ok = parsed.filter(r => r.status === "ok");
+      const dup = parsed.filter(r => r.status === "dup");
+      const err = parsed.filter(r => r.status === "error");
+      const badge = { ok: '<span class="badge ok">Mới</span>', dup: '<span class="badge warn">Trùng</span>', error: '<span class="badge bad">Lỗi</span>' };
+      const show = parsed.slice(0, 200);
+      body.innerHTML = `
+        <div class="toolbar" style="justify-content:space-between;align-items:center;">
+          <button class="btn ghost" id="imp-back">← Sửa dữ liệu</button>
+          <span><b>${ok.length}</b> mới · <b>${dup.length}</b> trùng · <b>${err.length}</b> lỗi</span>
+        </div>
+        ${dup.length ? `<label style="display:flex;align-items:center;gap:.5rem;margin:.2rem 0 .5rem;font-weight:600;"><input type="checkbox" id="imp-skipdup" checked style="width:auto"> Bỏ qua ${dup.length} dòng trùng (theo SĐT hoặc họ tên)</label>` : ""}
+        <div class="sm-table-wrap" style="max-height:320px;overflow:auto;"><table class="sm-table"><thead><tr><th>#</th><th>Tình trạng</th><th>Họ tên</th><th>SĐT</th><th>Ngày sinh</th><th>Ghi chú</th></tr></thead><tbody>
+          ${show.map((r, i) => `<tr>
+            <td>${i + 1}</td><td>${badge[r.status]}</td>
+            <td><b>${SM.esc(r.raw.full_name || "")}</b></td>
+            <td>${SM.esc(r.raw.phone || "")}</td>
+            <td>${SM.esc(r.raw.dob || "")}</td>
+            <td style="font-size:.82rem;color:${r.status === "error" ? "var(--danger)" : "var(--muted)"}">${SM.esc(r.msg || "")}</td>
+          </tr>`).join("")}
+        </tbody></table></div>
+        ${parsed.length > 200 ? `<p class="muted" style="font-size:.8rem;margin:.3rem 0 0;">Hiển thị 200/${parsed.length} dòng đầu; tất cả sẽ được xử lý khi nhập.</p>` : ""}
+        <div class="mf" style="position:static;padding:.9rem 0 0;border:0;">
+          <span class="msg" id="imp-msg2" style="margin-right:auto;"></span>
+          <button class="btn ghost" data-x="close">Hủy</button>
+          <button class="btn" id="imp-go">💾 Nhập</button>
+        </div>`;
+      body.querySelector("#imp-back").addEventListener("click", step1);
+      const goBtn = body.querySelector("#imp-go");
+      const skipEl = body.querySelector("#imp-skipdup");
+      const nToImport = () => ok.length + (skipEl && !skipEl.checked ? dup.length : 0);
+      const relabel = () => { const n = nToImport(); goBtn.textContent = "💾 Nhập " + n + " học viên"; goBtn.disabled = n === 0; };
+      if (skipEl) skipEl.addEventListener("change", relabel);
+      relabel();
+      goBtn.addEventListener("click", async () => {
+        const toInsert = parsed.filter(r => r.status === "ok" || (r.status === "dup" && skipEl && !skipEl.checked)).map(r => r.row);
+        if (!toInsert.length) return;
+        goBtn.disabled = true;
+        const m = body.querySelector("#imp-msg2"); m.textContent = "Đang nhập…"; m.className = "msg";
+        let done = 0, failed = 0;
+        for (let i = 0; i < toInsert.length; i += 100) {
+          const { error } = await sb.from("students").insert(toInsert.slice(i, i + 100));
+          if (error) failed += Math.min(100, toInsert.length - i); else done += Math.min(100, toInsert.length - i);
+        }
+        ov.remove();
+        SM.toast(`✓ Đã nhập ${done} học viên` + (failed ? ` · lỗi ${failed}` : ""), failed ? "err" : "ok");
+        load();
+      });
+    }
+
+    step1();
+  }
+
   return {
+    _import: { parseDelimited, parseAndValidate, mapGender, normPhone, normName },   // để kiểm thử
     render(el, me) { ME = me; box = el; load(); }
   };
 })();

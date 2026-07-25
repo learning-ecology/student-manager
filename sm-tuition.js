@@ -44,7 +44,7 @@ window.Tuition = (function () {
   // ctx = { cls, enr, sessions, rates, attMap, year, month }
   // trả về { subtotal, discount, total, lines[], other[], skipped[], winStart, winEnd }
   function computeInvoice(ctx) {
-    const { cls: c, enr, sessions, rates, attMap, year, month } = ctx;
+    const { cls: c, enr, sessions, rates, attMap, year, month, chargeSet } = ctx;
     const { start: ms, end: me } = monthRange(year, month);
     const winStart = (enr.joined_on > ms) ? enr.joined_on : ms;
     const leftCap = enr.left_on && enr.left_on < me ? enr.left_on : me;
@@ -56,7 +56,18 @@ window.Tuition = (function () {
     const lines = [], skipped = [];
     let subtotal = 0;
 
-    if (PER_SESSION.has(method)) {
+    if (PER_SESSION.has(method) && chargeSet) {
+      // CHỌN TAY: tính đúng các buổi đã tick (bỏ buổi hủy), không phụ thuộc điểm danh/ngày ghi danh.
+      const list = (sessions || []).filter(s => chargeSet.has(s.id) && s.status !== "cancelled")
+        .sort((a, b) => a.date === b.date ? (a.start_time < b.start_time ? -1 : 1) : (a.date < b.date ? -1 : 1));
+      for (const s of list) {
+        const r = rateFor(s.date);
+        const unit = (enr.tuition_override > 0 ? enr.tuition_override : (r ? r.amount : c.tuition_amount)) || 0;
+        subtotal += unit;
+        lines.push({ kind: "lesson", quantity: 1, unit_amount: unit, amount: unit,
+          description: fmtDate(s.date) + (s.type === "makeup" ? " · bù" : s.type === "extra" ? " · thêm" : "") });
+      }
+    } else if (PER_SESSION.has(method)) {
       const inWin = (sessions || []).filter(s => s.date >= winStart && s.date <= winEnd)
         .sort((a, b) => a.date === b.date ? (a.start_time < b.start_time ? -1 : 1) : (a.date < b.date ? -1 : 1));
       for (const s of inWin) {
@@ -108,35 +119,40 @@ window.Tuition = (function () {
   }
 
   /* ============ TẢI DỮ LIỆU ĐỂ TÍNH 1 LỚP ============ */
-  async function loadClassBilling(classId, year, month) {
-    const { start, end } = monthRange(year, month);
+  async function loadClassBilling(classId, from, to) {
     const [sess, rates] = await Promise.all([
-      sb.from("sessions").select("id,date,start_time,type,status").eq("class_id", classId).gte("date", start).lte("date", end).order("date"),
+      sb.from("sessions").select("id,date,start_time,end_time,type,status").eq("class_id", classId).gte("date", from).lte("date", to).order("date"),
       sb.from("tuition_rates").select("*").eq("class_id", classId).order("effective_from")
     ]);
     return { sessions: sess.data || [], rates: rates.data || [] };
   }
 
   // Tính (hoặc tính lại) hóa đơn NHÁP cho 1 học viên. Không đụng hóa đơn đã chốt.
-  // pre (tùy chọn) = { sessions, rates } để dùng chung khi tính cả lớp.
-  async function buildInvoice(studentId, classId, year, month, pre) {
+  // opts = { billFrom, billTo, chargeSet (Set|null), sessions, rates }.
+  //  - chargeSet có → chọn tay: tính đúng các buổi được tick trong [billFrom,billTo].
+  //  - chargeSet null → tự động theo điểm danh + khung ghi danh (như cũ).
+  async function buildInvoice(studentId, classId, year, month, opts) {
     const c = cls(classId);
-    const { start, end } = monthRange(year, month);
-    // ghi danh bao trùm tháng
+    opts = opts || {};
+    const winA = opts.billFrom || monthRange(year, month).start;
+    const winB = opts.billTo || monthRange(year, month).end;
+    // ghi danh giao với khoảng tính phí
     const { data: enr } = await sb.from("enrollments").select("*")
       .eq("student_id", studentId).eq("class_id", classId)
-      .lte("joined_on", end).order("joined_on", { ascending: false }).limit(1).maybeSingle();
-    if (!enr || (enr.left_on && enr.left_on < start)) return { skipped: true, reason: "không có ghi danh trong kỳ" };
+      .lte("joined_on", winB).order("joined_on", { ascending: false }).limit(1).maybeSingle();
+    if (!enr || (enr.left_on && enr.left_on < winA)) return { skipped: true, reason: "không có ghi danh trong kỳ" };
 
-    const { sessions, rates } = pre || await loadClassBilling(classId, year, month);
-    // điểm danh của học viên trong các buổi này
+    const { sessions, rates } = (opts.sessions ? { sessions: opts.sessions, rates: opts.rates } : await loadClassBilling(classId, winA, winB));
+    const chargeSet = opts.chargeSet || null;
     const attMap = {};
-    const sessIds = sessions.map(s => s.id);
-    if (sessIds.length) {
-      const { data: at } = await sb.from("attendance").select("session_id,status").eq("student_id", studentId).in("session_id", sessIds);
-      (at || []).forEach(a => attMap[a.session_id] = a.status);
+    if (!chargeSet) {   // chế độ tự động cần điểm danh
+      const sessIds = sessions.map(s => s.id);
+      if (sessIds.length) {
+        const { data: at } = await sb.from("attendance").select("session_id,status").eq("student_id", studentId).in("session_id", sessIds);
+        (at || []).forEach(a => attMap[a.session_id] = a.status);
+      }
     }
-    const r = computeInvoice({ cls: c, enr, sessions, rates, attMap, year, month });
+    const r = computeInvoice({ cls: c, enr, sessions, rates, attMap, year, month, chargeSet });
 
     // hóa đơn hiện có?
     const { data: ex } = await sb.from("invoices").select("id,status")
@@ -162,18 +178,21 @@ window.Tuition = (function () {
     return { id: invId, total: r.total, built: true };
   }
 
-  async function buildMonth(classId) {
+  // Tính hóa đơn nháp cho MỌI học viên của 1 lớp trong khoảng [from,to].
+  //  chargeSet null → tự lấy toàn bộ buổi (bỏ buổi hủy) trong khoảng làm "buổi tính phí".
+  async function buildForClass(classId, from, to, chargeSet) {
     const c = cls(classId);
-    const { start, end } = monthRange(st.year, st.month);
+    const { sessions, rates } = await loadClassBilling(classId, from, to);
+    const set = chargeSet || new Set(sessions.filter(s => s.status !== "cancelled").map(s => s.id));
     const { data: enr } = await sb.from("enrollments").select("student_id,joined_on,left_on")
-      .eq("class_id", classId).lte("joined_on", end);
-    const students = [...new Set((enr || []).filter(e => !e.left_on || e.left_on >= start).map(e => e.student_id))];
-    if (!students.length) return { built: 0, skipped: 0, total: 0 };
-    const pre = await loadClassBilling(classId, st.year, st.month);
+      .eq("class_id", classId).lte("joined_on", to);
+    const students = [...new Set((enr || []).filter(e => !e.left_on || e.left_on >= from).map(e => e.student_id))];
+    if (!students.length) return { built: 0, skipped: 0, total: 0, name: c.name };
+    const opts = { billFrom: from, billTo: to, chargeSet: set, sessions, rates };
     let built = 0, skipped = 0, sum = 0;
     for (const sid of students) {
       try {
-        const res = await buildInvoice(sid, classId, st.year, st.month, pre);
+        const res = await buildInvoice(sid, classId, st.year, st.month, opts);
         if (res.built) { built++; sum += res.total; } else skipped++;
       } catch (e) { skipped++; SM.toast("Lỗi tính cho 1 học viên: " + (e.message || e), "err"); }
     }
@@ -250,19 +269,135 @@ window.Tuition = (function () {
     if (ic) ic.addEventListener("change", () => { st.classId = ic.value; loadInvoices(); });
   }
 
-  async function doBuild() {
-    const targets = st.classId ? [st.classId] : classes.filter(c => c.status !== "completed").map(c => c.id);
-    if (!targets.length) return SM.toast("Chưa có lớp để tính.", "err");
-    if (!st.classId) {
-      const ok = await SM.confirmDialog({ title: "Tính hóa đơn cho tất cả lớp?", okText: "Tính tất cả",
-        body: `Tạo/cập nhật hóa đơn <b>nháp</b> ${MONTHS[st.month - 1]}/${st.year} cho <b>${targets.length} lớp</b>. Hóa đơn đã chốt sẽ được giữ nguyên.` });
-      if (!ok) return;
+  function doBuild() { genDialog(st.classId || null); }
+
+  const WD = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
+  // Hộp thoại tính hóa đơn linh hoạt: chọn khoảng ngày, có/không tính buổi tương lai,
+  // và (với 1 lớp theo buổi) tick từng buổi cần tính phí.
+  async function genDialog(classId) {
+    const single = !!classId;
+    const c = single ? cls(classId) : null;
+    const perSession = single ? PER_SESSION.has(c.tuition_method) : true;
+    const { start: ms, end: me } = monthRange(st.year, st.month);
+    const today = SM.todayISO();
+    let from = ms, to = me, includeFuture = true;
+    let sessions = [], rates = [];
+    const checked = new Set();
+    const rateFor = d => { let r = null; for (const x of rates.slice().sort((a, b) => a.effective_from < b.effective_from ? -1 : 1)) { if (x.effective_from <= d) r = x; else break; } return r; };
+    const unitFor = d => { const r = rateFor(d); return (r ? r.amount : (c ? c.tuition_amount : 0)) || 0; };
+    const effTo = () => includeFuture ? to : (to < today ? to : today);
+
+    const ov = document.createElement("div"); ov.className = "sm-ov";
+    ov.innerHTML = `<div class="sm-modal" style="max-width:560px;"><div class="mh">
+        <h3>⚡ Tính hóa đơn nháp${single ? " · " + SM.esc(c.name) : " · tất cả lớp"}</h3><button class="btn ghost" data-x="close">✕</button></div>
+      <div class="mb" id="gen-body"><div class="card placeholder"><span class="spinner"></span></div></div></div>`;
+    document.body.appendChild(ov);
+    ov.addEventListener("click", e => { if (e.target === ov || e.target.dataset.x === "close") ov.remove(); });
+    const body = ov.querySelector("#gen-body");
+
+    async function reload() {
+      if (single && perSession) {
+        const r = await loadClassBilling(classId, from, effTo());
+        sessions = (r.sessions || []).filter(s => s.status !== "cancelled");
+        rates = r.rates;
+        checked.clear(); sessions.forEach(s => checked.add(s.id));
+      }
+      render();
     }
-    const btn = box.querySelector('[data-act="build"]'); if (btn) { btn.disabled = true; btn.textContent = "⏳ Đang tính…"; }
-    let built = 0, skipped = 0, sum = 0;
-    for (const cid of targets) { const r = await buildMonth(cid); built += r.built; skipped += r.skipped; sum += r.total; }
-    SM.toast(`✓ Đã tính ${built} hóa đơn nháp${skipped ? " · bỏ qua " + skipped + " (đã chốt/không có ghi danh)" : ""}`, "ok");
-    loadInvoices();
+
+    function summaryHtml() {
+      const future = includeFuture ? "Có" : "Không";
+      if (single && perSession) {
+        const sel = sessions.filter(s => checked.has(s.id));
+        const units = sel.map(s => unitFor(s.date));
+        const total = units.reduce((a, b) => a + b, 0);
+        const uniq = [...new Set(units)];
+        const price = uniq.length === 0 ? "—" : uniq.length === 1 ? SM.vnd(uniq[0]) : "nhiều mức";
+        return `<table class="inv-lines">
+          <tr><td>Kỳ hóa đơn</td><td class="r">${MONTHS[st.month - 1]}/${st.year}</td></tr>
+          <tr><td>Khoảng tính phí</td><td class="r">${SM.dmy(from)} – ${SM.dmy(effTo())}</td></tr>
+          <tr><td>Số buổi tính phí</td><td class="r"><b>${sel.length}</b></td></tr>
+          <tr><td>Đơn giá</td><td class="r">${price}</td></tr>
+          <tr><td>Tính buổi tương lai</td><td class="r">${future}</td></tr>
+          <tr class="tot"><td>Tổng học phí (tạm tính)</td><td class="r">${SM.vnd(total)}</td></tr>
+        </table><p class="muted" style="font-size:.8rem;margin:.3rem 0 0;">Giảm giá riêng của từng học viên (nếu có) sẽ trừ thêm khi tạo hóa đơn.</p>`;
+      }
+      if (single) {   // lớp tính phí cố định
+        return `<table class="inv-lines">
+          <tr><td>Kỳ hóa đơn</td><td class="r">${MONTHS[st.month - 1]}/${st.year}</td></tr>
+          <tr><td>Cách tính</td><td class="r">${METHOD[c.tuition_method]}</td></tr>
+          <tr class="tot"><td>Học phí</td><td class="r">${SM.vnd(c.tuition_amount)}</td></tr>
+        </table><p class="muted" style="font-size:.82rem;">Mức cố định; giảm giá riêng của từng học viên áp dụng khi tạo.</p>`;
+      }
+      return `<p class="muted" style="font-size:.86rem;">Sẽ tạo hóa đơn nháp cho <b>mọi lớp đang hoạt động</b>, tính tất cả buổi trong khoảng ${SM.dmy(from)} – ${SM.dmy(effTo())}${includeFuture ? "" : " (đến hôm nay)"}.</p>`;
+    }
+
+    function render() {
+      body.innerHTML = `
+        <div class="grid2">
+          <div class="field"><label>Từ ngày (DD/MM/YYYY)</label><input id="g-from" value="${SM.dmy(from)}"></div>
+          <div class="field"><label>Đến ngày (DD/MM/YYYY)</label><input id="g-to" value="${SM.dmy(to)}"></div>
+        </div>
+        <label style="display:flex;align-items:center;gap:.5rem;font-weight:600;margin:.1rem 0 .6rem;">
+          <input type="checkbox" id="g-future" ${includeFuture ? "checked" : ""} style="width:auto"> Tính cả buổi trong tương lai (chưa diễn ra)</label>
+        ${single && perSession ? `
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;">
+            <b style="font-size:.9rem;">Chọn buổi tính phí (${sessions.length})</b>
+            <span class="row-actions"><button class="btn ghost" data-g="all" style="padding:.2rem .5rem;font-size:.8rem;">Chọn tất cả</button>
+              <button class="btn ghost" data-g="none" style="padding:.2rem .5rem;font-size:.8rem;">Bỏ chọn</button></span></div>
+          <div id="g-list" class="card" style="max-height:230px;overflow:auto;padding:.3rem .5rem;margin:.4rem 0 .7rem;">
+            ${sessions.length ? sessions.map(s => `<label class="g-row" style="display:flex;align-items:center;gap:.6rem;padding:.32rem .2rem;border-bottom:1px solid var(--line);cursor:pointer;${s.date > today ? "opacity:.85" : ""}">
+                <input type="checkbox" data-sess="${s.id}" ${checked.has(s.id) ? "checked" : ""} style="width:auto">
+                <b style="min-width:74px;">${SM.dmy(s.date).slice(0, 5)} ${WD[new Date(s.date + "T00:00:00").getDay()]}</b>
+                <span class="muted" style="font-size:.82rem;flex:1;">${SM.hm(s.start_time)}–${SM.hm(s.end_time)}${s.type !== "regular" ? " · " + (s.type === "makeup" ? "bù" : "thêm") : ""}${s.date > today ? " · sắp tới" : ""}</span>
+                <span>${SM.vnd(unitFor(s.date))}</span>
+              </label>`).join("") : `<p class="muted" style="padding:.6rem">Không có buổi học nào trong khoảng này.</p>`}
+          </div>` : ""}
+        <div id="g-summary">${summaryHtml()}</div>`;
+
+      const gf = body.querySelector("#g-from"), gt = body.querySelector("#g-to"), fut = body.querySelector("#g-future");
+      gf.addEventListener("change", () => { const v = SM.parseDmy(gf.value.trim()); if (v) { from = v; reload(); } else { gf.value = SM.dmy(from); } });
+      gt.addEventListener("change", () => { const v = SM.parseDmy(gt.value.trim()); if (v) { to = v; reload(); } else { gt.value = SM.dmy(to); } });
+      fut.addEventListener("change", () => { includeFuture = fut.checked; reload(); });
+      body.querySelectorAll("[data-sess]").forEach(cb => cb.addEventListener("change", () => {
+        cb.checked ? checked.add(cb.dataset.sess) : checked.delete(cb.dataset.sess);
+        body.querySelector("#g-summary").innerHTML = summaryHtml();
+      }));
+      const ga = body.querySelector('[data-g="all"]'), gn = body.querySelector('[data-g="none"]');
+      if (ga) ga.addEventListener("click", () => { sessions.forEach(s => checked.add(s.id)); render(); });
+      if (gn) gn.addEventListener("click", () => { checked.clear(); render(); });
+    }
+
+    // chân hộp thoại (cố định)
+    ov.querySelector(".sm-modal").insertAdjacentHTML("beforeend",
+      `<div class="mf"><button class="btn ghost" data-x="close">Hủy</button>
+        <button class="btn" id="g-go">⚡ Tạo hóa đơn nháp</button>
+        <span class="msg" id="g-msg" style="align-self:center"></span></div>`);
+    ov.querySelector('[data-x="close"]').onclick = () => ov.remove();
+    ov.querySelector("#g-go").addEventListener("click", async () => {
+      const say = (t, e) => { const m = ov.querySelector("#g-msg"); m.textContent = t; m.className = "msg" + (e ? " err" : ""); };
+      if (to < from) return say("Đến ngày phải sau Từ ngày.", true);
+      const btn = ov.querySelector("#g-go"); btn.disabled = true; say("Đang tính…");
+      const eff = effTo();
+      let built = 0, skipped = 0;
+      try {
+        if (single) {
+          const set = perSession ? new Set([...checked]) : null;   // lớp cố định: set null (computeInvoice tính phẳng)
+          const r = await buildForClass(classId, from, eff, perSession ? set : new Set());
+          built = r.built; skipped = r.skipped;
+        } else {
+          for (const cc of classes.filter(x => x.status !== "completed")) {
+            const r = await buildForClass(cc.id, from, eff, null);
+            built += r.built; skipped += r.skipped;
+          }
+        }
+      } catch (e) { btn.disabled = false; return say("Lỗi: " + (e.message || e), true); }
+      ov.remove();
+      SM.toast(`✓ Đã tính ${built} hóa đơn nháp` + (skipped ? ` · bỏ qua ${skipped}` : ""), "ok");
+      loadInvoices();
+    });
+
+    reload();
   }
 
   async function invoiceDetail(id) {
@@ -325,8 +460,13 @@ window.Tuition = (function () {
     const reb = modal.querySelector('[data-x="rebuild"]');
     if (reb) reb.onclick = async () => {
       reb.disabled = true; say("Đang tính lại…");
-      try { await buildInvoice(inv.student_id, inv.class_id, inv.period_year, inv.period_month); ov.remove(); SM.toast("✓ Đã tính lại", "ok"); loadInvoices(); }
-      catch (e) { reb.disabled = false; say("Lỗi: " + (e.message || e), true); }
+      try {
+        const { start, end } = monthRange(inv.period_year, inv.period_month);
+        const { sessions, rates } = await loadClassBilling(inv.class_id, start, end);
+        const set = new Set(sessions.filter(s => s.status !== "cancelled").map(s => s.id));
+        await buildInvoice(inv.student_id, inv.class_id, inv.period_year, inv.period_month, { billFrom: start, billTo: end, chargeSet: set, sessions, rates });
+        ov.remove(); SM.toast("✓ Đã tính lại (mọi buổi trong tháng)", "ok"); loadInvoices();
+      } catch (e) { reb.disabled = false; say("Lỗi: " + (e.message || e), true); }
     };
     const fin = modal.querySelector('[data-x="finalize"]');
     if (fin) fin.onclick = () => finalizeDialog(inv, ov);

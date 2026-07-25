@@ -125,7 +125,7 @@ window.Schedule = (function () {
       let cells = "";
       for (let d = a, i = 0; i < 42; d = addDays(d, 1), i++) {
         const list = byDate[d] || [];
-        cells += `<div class="cal-cell${d.slice(0, 7) !== m ? " out" : ""}${d === today ? " today" : ""}${hmap[d] ? " holiday" : ""}" data-day="${d}">
+        cells += `<div class="cal-cell${d.slice(0, 7) !== m ? " out" : ""}${d === today ? " today" : ""}${d === st.anchor && d !== today ? " sel" : ""}${hmap[d] ? " holiday" : ""}" data-day="${d}">
           <div class="dn">${+d.slice(8)}${hmap[d] ? `<span class="hn">${SM.esc(hmap[d])}</span>` : ""}</div>
           ${list.slice(0, 3).map(s => `<div class="mini ${s.status}">${SM.hm(s.start_time)} ${SM.esc(cName(s.class_id))}${confs.has(s.id) ? " ⚠️" : ""}</div>`).join("")}
           ${list.length > 3 ? `<div class="mini more">+${list.length - 3} buổi nữa</div>` : ""}
@@ -141,7 +141,7 @@ window.Schedule = (function () {
         ${days.map(d => {
           const list = byDate[d] || [];
           return `<div class="cal-col">
-            <div class="dh${d === today ? " today" : ""}${hmap[d] ? " holiday" : ""}">
+            <div class="dh${d === today ? " today" : ""}${d === st.anchor && d !== today && st.mode === "week" ? " sel" : ""}${hmap[d] ? " holiday" : ""}">
               <b>${WD[fromISO(d).getDay()]}</b> ${SM.dmy(d).slice(0, 5)}${hmap[d] ? `<span class="badge bad" style="margin-left:.3rem">${SM.esc(hmap[d])}</span>` : ""}
             </div>
             ${list.map(s => sessCard(s, confs)).join("") || `<p class="muted" style="font-size:.8rem;text-align:center;padding:.5rem 0;margin:0;">—</p>`}

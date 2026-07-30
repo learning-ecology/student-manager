@@ -381,8 +381,9 @@ window.Students = (function () {
     });
   }
 
-  /* ============ GĐ11 — Nhập học viên hàng loạt (CSV / dán) ============ */
-  const IMP_COLS = ["full_name", "dob", "gender", "phone", "email", "guardian_name", "guardian_phone", "address", "enrolled_on", "notes"];
+  /* ============ GĐ11 — Nhập học viên hàng loạt (dán / CSV / mẫu Excel) ============ */
+  //  Thứ tự cột: Họ tên · Ngày sinh · Giới tính · Lớp · SĐT · Email · Phụ huynh · SĐT PH · Địa chỉ · Ngày NH · Ghi chú
+  const IMP_COLS = ["full_name", "dob", "gender", "class_name", "phone", "email", "guardian_name", "guardian_phone", "address", "enrolled_on", "notes"];
   const normPhone = s => String(s || "").replace(/[^\d]/g, "");
   const normName = s => String(s || "").trim().toLowerCase().replace(/\s+/g, " ");
   function mapGender(v) {
@@ -408,122 +409,269 @@ window.Students = (function () {
     if (field !== "" || row.length) { row.push(field); rows.push(row); }
     return rows;
   }
-  async function parseAndValidate(text) {
+  // classes: [{id,name}] · defaultClassId: lớp mặc định (nếu để trống cột Lớp)
+  async function parseAndValidate(text, defaultClassId, classes) {
     const delim = text.includes("\t") ? "\t" : ",";
     let rows = parseDelimited(text, delim).filter(r => r.some(c => (c || "").trim() !== ""));
     if (rows.length) {
       const first = (rows[0][0] || "").trim().toLowerCase();
-      if (/họ tên|ho ten|^tên$|^name$|fullname|học viên/.test(first)) rows = rows.slice(1);
+      if (/họ tên|ho ten|^tên$|^name$|fullname|học viên|họ và tên/.test(first)) rows = rows.slice(1);
     }
     const { data: existing } = await sb.from("students").select("full_name,phone");
     const exPhone = new Set(), exName = new Set();
     (existing || []).forEach(s => { if (s.phone) exPhone.add(normPhone(s.phone)); if (s.full_name) exName.add(normName(s.full_name)); });
+    const clsByName = {}; (classes || []).forEach(c => clsByName[normName(c.name)] = c.id);
     const seenPhone = new Set(), seenName = new Set();
     const today = SM.todayISO();
     return rows.map(cells => {
       const raw = {}; IMP_COLS.forEach((k, i) => raw[k] = (cells[i] || "").trim());
-      if (!raw.full_name) return { raw, status: "error", msg: "Thiếu họ tên" };
+      // giải quyết lớp (tên → id); cột Lớp là tùy chọn
+      let classId = defaultClassId || null, classWarn = "";
+      if (raw.class_name) {
+        const found = clsByName[normName(raw.class_name)];
+        if (found) classId = found;
+        else classWarn = 'Lớp "' + raw.class_name + '" không có — ' + (defaultClassId ? "dùng lớp đã chọn" : "sẽ không xếp lớp");
+      }
+      const mk = (status, msg) => ({ raw, status, msg: msg + (classWarn && status !== "error" ? (msg ? " · " : "") + classWarn : ""), classId });
+      if (!raw.full_name) return mk("error", "Thiếu họ tên");
       let dob = null;
-      if (raw.dob) { dob = SM.parseDmy(raw.dob); if (!dob) return { raw, status: "error", msg: "Ngày sinh sai (DD/MM/YYYY)" }; }
-      const g = mapGender(raw.gender); if (!g.ok) return { raw, status: "error", msg: "Giới tính phải là Nam/Nữ/Khác" };
-      if (raw.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(raw.email)) return { raw, status: "error", msg: "Email không hợp lệ" };
+      if (raw.dob) { dob = SM.parseDmy(raw.dob); if (!dob) return mk("error", "Ngày sinh sai (DD/MM/YYYY)"); }
+      const g = mapGender(raw.gender); if (!g.ok) return mk("error", "Giới tính phải là Nam/Nữ/Khác");
+      if (raw.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(raw.email)) return mk("error", "Email không hợp lệ");
       let enrolled = today;
-      if (raw.enrolled_on) { enrolled = SM.parseDmy(raw.enrolled_on); if (!enrolled) return { raw, status: "error", msg: "Ngày nhập học sai (DD/MM/YYYY)" }; }
+      if (raw.enrolled_on) { enrolled = SM.parseDmy(raw.enrolled_on); if (!enrolled) return mk("error", "Ngày nhập học sai (DD/MM/YYYY)"); }
       const np = normPhone(raw.phone), nn = normName(raw.full_name);
       let dupMsg = "";
       if (np && (exPhone.has(np) || seenPhone.has(np))) dupMsg = "Trùng SĐT";
       else if (exName.has(nn) || seenName.has(nn)) dupMsg = "Trùng họ tên";
       if (np) seenPhone.add(np); seenName.add(nn);
-      const row = { full_name: raw.full_name, dob, gender: g.val, phone: raw.phone, email: raw.email,
+      const item = mk(dupMsg ? "dup" : "ok", dupMsg);
+      item.row = { full_name: raw.full_name, dob, gender: g.val, phone: raw.phone, email: raw.email,
         guardian_name: raw.guardian_name, guardian_phone: raw.guardian_phone, address: raw.address,
         enrolled_on: enrolled, status: "active", notes: raw.notes };
-      return dupMsg ? { raw, status: "dup", msg: dupMsg, row } : { raw, status: "ok", msg: "", row };
+      return item;
     });
   }
 
-  function importModal() {
+  /* ---- Sinh file Excel mẫu (.xlsx) tự viết: ZIP (store) + OOXML, đủ tiếng Việt + dropdown ---- */
+  const xesc = s => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  let _crcT;
+  function crc32(bytes) {
+    if (!_crcT) { _crcT = []; for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1); _crcT[n] = c >>> 0; } }
+    let crc = 0xFFFFFFFF; for (let i = 0; i < bytes.length; i++) crc = (crc >>> 8) ^ _crcT[(crc ^ bytes[i]) & 0xFF];
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+  }
+  function zipStore(files) {
+    const u16 = n => [n & 255, (n >> 8) & 255], u32 = n => [n & 255, (n >> 8) & 255, (n >> 16) & 255, (n >> 24) & 255];
+    const parts = [], central = []; let offset = 0;
+    for (const f of files) {
+      const crc = crc32(f.data), sz = f.data.length;
+      const h = new Uint8Array([0x50, 0x4b, 0x03, 0x04, ...u16(20), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(crc), ...u32(sz), ...u32(sz), ...u16(f.name.length), ...u16(0)]);
+      parts.push(h, f.name, f.data);
+      central.push({ name: f.name, crc, sz, offset });
+      offset += h.length + f.name.length + sz;
+    }
+    const cd = []; let cdSize = 0;
+    for (const c of central) {
+      const r = new Uint8Array([0x50, 0x4b, 0x01, 0x02, ...u16(20), ...u16(20), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(c.crc), ...u32(c.sz), ...u32(c.sz), ...u16(c.name.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(c.offset)]);
+      cd.push(r, c.name); cdSize += r.length + c.name.length;
+    }
+    const end = new Uint8Array([0x50, 0x4b, 0x05, 0x06, ...u16(0), ...u16(0), ...u16(central.length), ...u16(central.length), ...u32(cdSize), ...u32(offset), ...u16(0)]);
+    const all = [...parts, ...cd, end]; let total = all.reduce((a, x) => a + x.length, 0);
+    const out = new Uint8Array(total); let p = 0; for (const x of all) { out.set(x, p); p += x.length; }
+    return out;
+  }
+  function buildXlsx(classNames) {
+    const enc = new TextEncoder();
+    const COL = i => String.fromCharCode(65 + i);
+    const cell = (i, r, t, s) => `<c r="${COL(i)}${r}" t="inlineStr"${s ? ` s="${s}"` : ""}><is><t xml:space="preserve">${xesc(t)}</t></is></c>`;
+    const rowXml = (r, arr) => `<row r="${r}">${arr.map((t, i) => t == null || t === "" ? "" : cell(i, r, t, r === 1 ? 1 : 0)).join("")}</row>`;
+    const header = ["Họ và tên", "Ngày sinh (DD/MM/YYYY)", "Giới tính (Nam/Nữ/Khác)", "Lớp"];
+    const cn0 = (classNames && classNames[0]) || "";
+    const examples = [
+      ["Nguyễn Văn An", "01/09/2010", "Nam", cn0],
+      ["Trần Thị Bích", "15/03/2011", "Nữ", ""],
+      ["Lê Hoàng Cường", "", "Nam", ""],
+    ];
+    let sheetData = rowXml(1, header) + examples.map((e, i) => rowXml(i + 2, e)).join("");
+    // dropdown Giới tính + Lớp
+    const clsList = (classNames || []).map(n => String(n).replace(/[",]/g, " ").trim()).filter(Boolean).join(",");
+    let dv = `<dataValidation type="list" allowBlank="1" sqref="C2:C1001"><formula1>"Nam,Nữ,Khác"</formula1></dataValidation>`;
+    if (clsList && clsList.length <= 250) dv += `<dataValidation type="list" allowBlank="1" sqref="D2:D1001"><formula1>"${xesc(clsList)}"</formula1></dataValidation>`;
+    const sheet1 = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<cols><col min="1" max="1" width="24" customWidth="1"/><col min="2" max="2" width="20" customWidth="1"/><col min="3" max="3" width="20" customWidth="1"/><col min="4" max="4" width="24" customWidth="1"/></cols>
+<sheetData>${sheetData}</sheetData>
+<dataValidations count="${clsList && clsList.length <= 250 ? 2 : 1}">${dv}</dataValidations></worksheet>`;
+    const guide = [
+      "HƯỚNG DẪN NHẬP HỌC VIÊN HÀNG LOẠT",
+      "1. Điền dữ liệu vào sheet 'Học viên', mỗi học viên MỘT dòng (không xoá dòng tiêu đề).",
+      "2. Bắt buộc: Họ và tên. Các cột khác có thể để trống, không gây lỗi.",
+      "3. Ngày sinh: định dạng NGÀY/THÁNG/NĂM — DD/MM/YYYY, ví dụ 01/09/2010.",
+      "4. Giới tính: chọn Nam / Nữ / Khác từ danh sách xổ xuống.",
+      "5. Lớp: chọn tên lớp từ danh sách (chỉ gồm các lớp của bạn). Để trống nếu chưa xếp lớp.",
+      "6. Nếu bạn đã chọn 'Nhập vào lớp' trong ứng dụng, có thể để trống cột Lớp — mọi học viên sẽ vào lớp đó.",
+      "7. Sau khi điền xong: BÔI ĐEN các dòng đã điền → Copy → DÁN vào ô nhập trong ứng dụng;",
+      "   hoặc Lưu file thành .CSV (File → Save As → CSV UTF-8) rồi bấm 'Chọn tệp'.",
+      "8. Ứng dụng sẽ hiện bản XEM TRƯỚC để bạn kiểm tra, bỏ dòng sai, rồi mới nhập.",
+      "9. Ô nào không cần cứ để trống — hệ thống chỉ báo lỗi khi thiếu Họ và tên hoặc sai định dạng.",
+    ];
+    const sheet2 = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<cols><col min="1" max="1" width="100" customWidth="1"/></cols>
+<sheetData>${guide.map((t, i) => rowXml(i + 1, [t])).join("")}</sheetData></worksheet>`;
+    const files = [
+      { name: "[Content_Types].xml", body: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>` },
+      { name: "_rels/.rels", body: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>` },
+      { name: "xl/workbook.xml", body: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Học viên" sheetId="1" r:id="rId1"/><sheet name="Hướng dẫn" sheetId="2" r:id="rId2"/></sheets></workbook>` },
+      { name: "xl/_rels/workbook.xml.rels", body: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>` },
+      { name: "xl/styles.xml", body: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs></styleSheet>` },
+      { name: "xl/worksheets/sheet1.xml", body: sheet1 },
+      { name: "xl/worksheets/sheet2.xml", body: sheet2 },
+    ];
+    return zipStore(files.map(f => ({ name: enc.encode(f.name), data: enc.encode(f.body) })));
+  }
+  function downloadBytes(name, bytes, mime) {
+    const blob = new Blob([bytes], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  async function importModal(preClassId) {
     const ov = document.createElement("div"); ov.className = "sm-ov";
     ov.innerHTML = `<div class="sm-modal"><div class="mh"><h3>📥 Nhập học viên hàng loạt</h3><button class="btn ghost" data-x="close">✕</button></div>
-      <div class="mb" id="imp-body"></div></div>`;
+      <div class="mb" id="imp-body"><div class="card placeholder"><span class="spinner"></span></div></div></div>`;
     document.body.appendChild(ov);
     ov.addEventListener("click", e => { if (e.target === ov || e.target.dataset.x === "close") ov.remove(); });
     const body = ov.querySelector("#imp-body");
-    let parsed = [];
+    let parsed = [], selClass = preClassId || "";
+    // các lớp của giáo viên (RLS đã lọc theo tenant)
+    const { data: clsData } = await sb.from("classes").select("id,name").is("archived_at", null).order("name");
+    const classes = clsData || [];
+    const clsName = id => (classes.find(c => c.id === id) || {}).name || "";
 
     function step1() {
       body.innerHTML = `
-        <p class="muted" style="margin:.1rem 0 .6rem;font-size:.88rem;">Dán dữ liệu từ Excel/Google Sheets (mỗi học viên một dòng) hoặc chọn tệp CSV. Thứ tự cột:</p>
+        <div class="toolbar" style="align-items:flex-end;">
+          <button class="btn ghost" id="imp-tpl">⬇ Tải file mẫu (.xlsx)</button>
+          <div class="field" style="margin:0;flex:1;min-width:200px;"><label>Nhập vào lớp (áp dụng cho dòng để trống cột Lớp)</label>
+            <select id="imp-class"><option value="">— Không xếp lớp —</option>
+              ${classes.map(c => `<option value="${c.id}" ${selClass === c.id ? "selected" : ""}>${SM.esc(c.name)}</option>`).join("")}</select></div>
+        </div>
+        <p class="muted" style="margin:.5rem 0 .5rem;font-size:.86rem;">Dán dữ liệu từ Excel/Google Sheets (bôi đen → Copy → dán vào đây), hoặc chọn tệp CSV. Thứ tự cột:</p>
         <div class="card" style="padding:.5rem .7rem;font-size:.8rem;overflow-x:auto;white-space:nowrap;margin-bottom:.5rem;">
-          <b>Họ tên</b> · Ngày sinh (DD/MM/YYYY) · Giới tính (Nam/Nữ) · SĐT · Email · Tên phụ huynh · SĐT phụ huynh · Địa chỉ · Ngày nhập học · Ghi chú</div>
-        <p class="muted" style="font-size:.82rem;margin:0 0 .5rem;">Chỉ <b>Họ tên</b> bắt buộc; các cột sau có thể để trống hoặc lược bớt. Dòng tiêu đề (nếu có) tự bỏ qua.</p>
-        <textarea id="imp-text" style="min-height:150px;font-family:ui-monospace,monospace;font-size:.82rem;" placeholder="Nguyễn Văn An&#9;01/09/2010&#9;Nam&#9;0901234567&#10;Trần Thị Bích&#9;15/03/2011&#9;Nữ&#9;0912345678"></textarea>
+          <b>Họ và tên</b> · Ngày sinh (DD/MM/YYYY) · Giới tính (Nam/Nữ/Khác) · Lớp <span class="muted">· SĐT · Email · Phụ huynh · SĐT PH · Địa chỉ · Ngày NH · Ghi chú</span></div>
+        <p class="muted" style="font-size:.82rem;margin:0 0 .5rem;">Chỉ <b>Họ và tên</b> bắt buộc; ô khác để trống thoải mái. Dòng tiêu đề tự bỏ qua.</p>
+        <textarea id="imp-text" style="min-height:140px;font-family:ui-monospace,monospace;font-size:.82rem;" placeholder="Nguyễn Văn An&#9;01/09/2010&#9;Nam&#9;${SM.esc(classes[0] ? classes[0].name : "HSK 1")}&#10;Trần Thị Bích&#9;15/03/2011&#9;Nữ"></textarea>
         <div class="toolbar" style="margin-top:.5rem;align-items:center;">
           <label class="btn ghost" style="cursor:pointer;">📄 Chọn tệp CSV<input type="file" id="imp-file" accept=".csv,.tsv,.txt" hidden></label>
           <span style="flex:1"></span>
           <button class="btn" id="imp-preview">Xem trước →</button>
         </div>
         <p class="msg" id="imp-msg"></p>`;
+      const msg = body.querySelector("#imp-msg");
+      body.querySelector("#imp-class").addEventListener("change", e => selClass = e.target.value);
+      body.querySelector("#imp-tpl").addEventListener("click", () => {
+        try { downloadBytes("mau-nhap-hoc-vien.xlsx", buildXlsx(classes.map(c => c.name)), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"); SM.toast("⬇ Đã tải file mẫu", "ok"); }
+        catch (e) { SM.toast("Không tạo được file mẫu: " + (e.message || e), "err"); }
+      });
       body.querySelector("#imp-file").addEventListener("change", async e => {
         const f = e.target.files[0]; if (!f) return;
+        if (/\.xlsx$/i.test(f.name)) { msg.textContent = "File .xlsx không đọc trực tiếp được — hãy mở file, Copy các dòng rồi Dán vào ô, hoặc lưu thành .csv."; msg.className = "msg err"; e.target.value = ""; return; }
         body.querySelector("#imp-text").value = await f.text();
       });
       body.querySelector("#imp-preview").addEventListener("click", async () => {
         const text = body.querySelector("#imp-text").value;
-        if (!text.trim()) { const m = body.querySelector("#imp-msg"); m.textContent = "Chưa có dữ liệu."; m.className = "msg err"; return; }
+        if (!text.trim()) { msg.textContent = "Chưa có dữ liệu."; msg.className = "msg err"; return; }
         body.innerHTML = `<div class="card placeholder"><span class="spinner"></span></div>`;
-        parsed = await parseAndValidate(text);
+        parsed = await parseAndValidate(text, selClass, classes);
         step2();
       });
     }
 
     function step2() {
-      const ok = parsed.filter(r => r.status === "ok");
-      const dup = parsed.filter(r => r.status === "dup");
-      const err = parsed.filter(r => r.status === "error");
+      const dupCount = parsed.filter(r => r.status === "dup").length;
+      const okCount = parsed.filter(r => r.status === "ok").length;
+      const errCount = parsed.filter(r => r.status === "error").length;
       const badge = { ok: '<span class="badge ok">Mới</span>', dup: '<span class="badge warn">Trùng</span>', error: '<span class="badge bad">Lỗi</span>' };
-      const show = parsed.slice(0, 200);
+      const show = parsed.slice(0, 300);
       body.innerHTML = `
         <div class="toolbar" style="justify-content:space-between;align-items:center;">
           <button class="btn ghost" id="imp-back">← Sửa dữ liệu</button>
-          <span><b>${ok.length}</b> mới · <b>${dup.length}</b> trùng · <b>${err.length}</b> lỗi</span>
+          <span><b>${okCount}</b> mới · <b>${dupCount}</b> trùng · <b>${errCount}</b> lỗi · tổng ${parsed.length}</span>
         </div>
-        ${dup.length ? `<label style="display:flex;align-items:center;gap:.5rem;margin:.2rem 0 .5rem;font-weight:600;"><input type="checkbox" id="imp-skipdup" checked style="width:auto"> Bỏ qua ${dup.length} dòng trùng (theo SĐT hoặc họ tên)</label>` : ""}
-        <div class="sm-table-wrap" style="max-height:320px;overflow:auto;"><table class="sm-table"><thead><tr><th>#</th><th>Tình trạng</th><th>Họ tên</th><th>SĐT</th><th>Ngày sinh</th><th>Ghi chú</th></tr></thead><tbody>
-          ${show.map((r, i) => `<tr>
-            <td>${i + 1}</td><td>${badge[r.status]}</td>
-            <td><b>${SM.esc(r.raw.full_name || "")}</b></td>
-            <td>${SM.esc(r.raw.phone || "")}</td>
-            <td>${SM.esc(r.raw.dob || "")}</td>
-            <td style="font-size:.82rem;color:${r.status === "error" ? "var(--danger)" : "var(--muted)"}">${SM.esc(r.msg || "")}</td>
-          </tr>`).join("")}
+        ${dupCount ? `<label style="display:flex;align-items:center;gap:.5rem;margin:.2rem 0 .5rem;font-weight:600;"><input type="checkbox" id="imp-skipdup" checked style="width:auto"> Bỏ qua ${dupCount} dòng trùng (theo SĐT hoặc họ tên)</label>` : ""}
+        <p class="muted" style="font-size:.82rem;margin:.1rem 0 .4rem;">Kiểm tra dữ liệu; bấm ✕ để bỏ dòng không muốn nhập.</p>
+        <div class="sm-table-wrap" style="max-height:340px;overflow:auto;"><table class="sm-table"><thead><tr><th></th><th>Tình trạng</th><th>Họ và tên</th><th>Giới tính</th><th>Ngày sinh</th><th>Lớp</th><th>Ghi chú</th></tr></thead><tbody>
+          ${show.map((r, i) => {
+            const gender = { male: "Nam", female: "Nữ", other: "Khác" }[r.row && r.row.gender] || SM.esc(r.raw.gender || "");
+            const cls = r.classId ? SM.esc(clsName(r.classId)) : (r.raw.class_name ? SM.esc(r.raw.class_name) : "—");
+            return `<tr>
+              <td><button class="btn ghost" data-rm="${i}" title="Bỏ dòng này" style="padding:.15rem .45rem;color:var(--danger)">✕</button></td>
+              <td>${badge[r.status]}</td>
+              <td><b>${SM.esc(r.raw.full_name || "")}</b></td>
+              <td>${gender || "—"}</td>
+              <td>${SM.esc(r.raw.dob || "")}</td>
+              <td>${cls}</td>
+              <td style="font-size:.82rem;color:${r.status === "error" ? "var(--danger)" : "var(--muted)"}">${SM.esc(r.msg || "")}</td>
+            </tr>`;
+          }).join("")}
         </tbody></table></div>
-        ${parsed.length > 200 ? `<p class="muted" style="font-size:.8rem;margin:.3rem 0 0;">Hiển thị 200/${parsed.length} dòng đầu; tất cả sẽ được xử lý khi nhập.</p>` : ""}
+        ${parsed.length > 300 ? `<p class="muted" style="font-size:.8rem;margin:.3rem 0 0;">Hiển thị 300/${parsed.length} dòng đầu; tất cả sẽ được xử lý khi nhập.</p>` : ""}
         <div class="mf" style="position:static;padding:.9rem 0 0;border:0;">
           <span class="msg" id="imp-msg2" style="margin-right:auto;"></span>
           <button class="btn ghost" data-x="close">Hủy</button>
           <button class="btn" id="imp-go">💾 Nhập</button>
         </div>`;
       body.querySelector("#imp-back").addEventListener("click", step1);
+      body.querySelectorAll("[data-rm]").forEach(b => b.addEventListener("click", () => { parsed.splice(+b.dataset.rm, 1); step2(); }));
       const goBtn = body.querySelector("#imp-go");
       const skipEl = body.querySelector("#imp-skipdup");
-      const nToImport = () => ok.length + (skipEl && !skipEl.checked ? dup.length : 0);
+      const nToImport = () => okCount + (skipEl && !skipEl.checked ? dupCount : 0);
       const relabel = () => { const n = nToImport(); goBtn.textContent = "💾 Nhập " + n + " học viên"; goBtn.disabled = n === 0; };
       if (skipEl) skipEl.addEventListener("change", relabel);
       relabel();
       goBtn.addEventListener("click", async () => {
-        const toInsert = parsed.filter(r => r.status === "ok" || (r.status === "dup" && skipEl && !skipEl.checked)).map(r => r.row);
-        if (!toInsert.length) return;
+        const includeDup = skipEl && !skipEl.checked;
+        const items = parsed.filter(r => r.status === "ok" || (r.status === "dup" && includeDup));
+        if (!items.length) return;
         goBtn.disabled = true;
         const m = body.querySelector("#imp-msg2"); m.textContent = "Đang nhập…"; m.className = "msg";
-        let done = 0, failed = 0;
-        for (let i = 0; i < toInsert.length; i += 100) {
-          const { error } = await sb.from("students").insert(toInsert.slice(i, i + 100));
-          if (error) failed += Math.min(100, toInsert.length - i); else done += Math.min(100, toInsert.length - i);
+        let imported = 0, failed = 0, enrolled = 0; const enrollRows = [];
+        for (let i = 0; i < items.length; i += 100) {
+          const chunk = items.slice(i, i + 100);
+          const { data, error } = await sb.from("students").insert(chunk.map(x => x.row)).select("id");
+          if (error) { failed += chunk.length; continue; }
+          imported += data.length;
+          data.forEach((s, j) => { const cid = chunk[j].classId; if (cid) enrollRows.push({ student_id: s.id, class_id: cid, joined_on: chunk[j].row.enrolled_on || SM.todayISO(), status: "active" }); });
         }
-        ov.remove();
-        SM.toast(`✓ Đã nhập ${done} học viên` + (failed ? ` · lỗi ${failed}` : ""), failed ? "err" : "ok");
+        for (let i = 0; i < enrollRows.length; i += 100) {
+          const { error } = await sb.from("enrollments").insert(enrollRows.slice(i, i + 100));
+          if (!error) enrolled += Math.min(100, enrollRows.length - i);
+        }
+        summary({ imported, enrolled, skippedDup: includeDup ? 0 : dupCount, invalid: errCount, failed });
         load();
       });
+    }
+
+    function summary(r) {
+      body.innerHTML = `
+        <div style="text-align:center;padding:.6rem 0 .2rem;"><div style="font-size:2.4rem;">✅</div><h3 style="margin:.2rem 0;">Đã nhập xong</h3></div>
+        <table class="inv-lines" style="max-width:340px;margin:.4rem auto;">
+          <tr><td>Nhập thành công</td><td class="r"><b style="color:var(--good)">${r.imported}</b></td></tr>
+          <tr><td>Đã xếp vào lớp</td><td class="r">${r.enrolled}</td></tr>
+          <tr><td>Bỏ qua — trùng</td><td class="r">${r.skippedDup}</td></tr>
+          <tr><td>Bỏ qua — lỗi</td><td class="r">${r.invalid}</td></tr>
+          ${r.failed ? `<tr><td>Không lưu được</td><td class="r" style="color:var(--danger)">${r.failed}</td></tr>` : ""}
+        </table>
+        <div class="mf" style="position:static;padding:.9rem 0 0;border:0;justify-content:center;"><button class="btn" data-x="close">Xong</button></div>`;
     }
 
     step1();
@@ -531,6 +679,7 @@ window.Students = (function () {
 
   return {
     _import: { parseDelimited, parseAndValidate, mapGender, normPhone, normName },   // để kiểm thử
+    _buildXlsx: buildXlsx,
     render(el, me) { ME = me; box = el; load(); }
   };
 })();

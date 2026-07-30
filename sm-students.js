@@ -409,14 +409,25 @@ window.Students = (function () {
     if (field !== "" || row.length) { row.push(field); rows.push(row); }
     return rows;
   }
-  // classes: [{id,name}] · defaultClassId: lớp mặc định (nếu để trống cột Lớp)
+  function stripHeader(rows) {
+    if (rows.length) { const first = (rows[0][0] || "").toString().trim().toLowerCase();
+      if (/họ tên|ho ten|^tên$|^name$|fullname|học viên|họ và tên/.test(first)) return rows.slice(1); }
+    return rows;
+  }
+  // Từ text dán/CSV
   async function parseAndValidate(text, defaultClassId, classes) {
     const delim = text.includes("\t") ? "\t" : ",";
-    let rows = parseDelimited(text, delim).filter(r => r.some(c => (c || "").trim() !== ""));
-    if (rows.length) {
-      const first = (rows[0][0] || "").trim().toLowerCase();
-      if (/họ tên|ho ten|^tên$|^name$|fullname|học viên|họ và tên/.test(first)) rows = rows.slice(1);
-    }
+    const rows = parseDelimited(text, delim).filter(r => r.some(c => (c || "").trim() !== ""));
+    return buildItems(stripHeader(rows), defaultClassId, classes);
+  }
+  // Từ file .xlsx (đọc trực tiếp)
+  async function parseXlsxFile(file, defaultClassId, classes) {
+    let rows = await readXlsx(await file.arrayBuffer());
+    rows = rows.filter(r => r.some(c => (c || "").toString().trim() !== ""));
+    return buildItems(stripHeader(rows), defaultClassId, classes);
+  }
+  // classes: [{id,name}] · defaultClassId: lớp mặc định (nếu để trống cột Lớp)
+  async function buildItems(rows, defaultClassId, classes) {
     const { data: existing } = await sb.from("students").select("full_name,phone");
     const exPhone = new Set(), exName = new Set();
     (existing || []).forEach(s => { if (s.phone) exPhone.add(normPhone(s.phone)); if (s.full_name) exName.add(normName(s.full_name)); });
@@ -486,12 +497,12 @@ window.Students = (function () {
     const COL = i => String.fromCharCode(65 + i);
     const cell = (i, r, t, s) => `<c r="${COL(i)}${r}" t="inlineStr"${s ? ` s="${s}"` : ""}><is><t xml:space="preserve">${xesc(t)}</t></is></c>`;
     const rowXml = (r, arr) => `<row r="${r}">${arr.map((t, i) => t == null || t === "" ? "" : cell(i, r, t, r === 1 ? 1 : 0)).join("")}</row>`;
-    const header = ["Họ và tên", "Ngày sinh (DD/MM/YYYY)", "Giới tính (Nam/Nữ/Khác)", "Lớp"];
+    const header = ["Họ và tên", "Ngày sinh (DD/MM/YYYY)", "Giới tính (Nam/Nữ/Khác)", "Lớp", "Số điện thoại"];
     const cn0 = (classNames && classNames[0]) || "";
     const examples = [
-      ["Nguyễn Văn An", "01/09/2010", "Nam", cn0],
-      ["Trần Thị Bích", "15/03/2011", "Nữ", ""],
-      ["Lê Hoàng Cường", "", "Nam", ""],
+      ["Nguyễn Văn An", "01/09/2010", "Nam", cn0, "0901234567"],
+      ["Trần Thị Bích", "15/03/2011", "Nữ", "", "0912345678"],
+      ["Lê Hoàng Cường", "", "Nam", "", ""],
     ];
     let sheetData = rowXml(1, header) + examples.map((e, i) => rowXml(i + 2, e)).join("");
     // dropdown Giới tính + Lớp
@@ -500,7 +511,7 @@ window.Students = (function () {
     if (clsList && clsList.length <= 250) dv += `<dataValidation type="list" allowBlank="1" sqref="D2:D1001"><formula1>"${xesc(clsList)}"</formula1></dataValidation>`;
     const sheet1 = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-<cols><col min="1" max="1" width="24" customWidth="1"/><col min="2" max="2" width="20" customWidth="1"/><col min="3" max="3" width="20" customWidth="1"/><col min="4" max="4" width="24" customWidth="1"/></cols>
+<cols><col min="1" max="1" width="24" customWidth="1"/><col min="2" max="2" width="20" customWidth="1"/><col min="3" max="3" width="20" customWidth="1"/><col min="4" max="4" width="24" customWidth="1"/><col min="5" max="5" width="18" customWidth="1"/></cols>
 <sheetData>${sheetData}</sheetData>
 <dataValidations count="${clsList && clsList.length <= 250 ? 2 : 1}">${dv}</dataValidations></worksheet>`;
     const guide = [
@@ -544,6 +555,76 @@ window.Students = (function () {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
+  /* ---- Đọc file .xlsx: giải nén ZIP (store + deflate qua DecompressionStream) + đọc sheet đầu ---- */
+  const unesc = s => String(s).replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCharCode(parseInt(h, 16))).replace(/&#(\d+);/g, (_, d) => String.fromCharCode(+d)).replace(/&amp;/g, "&");
+  function readZipEntries(buf) {
+    const dv = new DataView(buf), bytes = new Uint8Array(buf), td = new TextDecoder();
+    let eocd = -1;
+    for (let i = bytes.length - 22; i >= 0; i--) { if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; } }
+    if (eocd < 0) throw new Error("Không phải file .xlsx/zip hợp lệ");
+    const count = dv.getUint16(eocd + 10, true); let p = dv.getUint32(eocd + 16, true);
+    const list = [];
+    for (let i = 0; i < count; i++) {
+      if (dv.getUint32(p, true) !== 0x02014b50) break;
+      const method = dv.getUint16(p + 10, true), compSize = dv.getUint32(p + 20, true);
+      const nameLen = dv.getUint16(p + 28, true), extraLen = dv.getUint16(p + 30, true), commentLen = dv.getUint16(p + 32, true);
+      const lho = dv.getUint32(p + 42, true);
+      const name = td.decode(bytes.subarray(p + 46, p + 46 + nameLen));
+      const lNameLen = dv.getUint16(lho + 26, true), lExtraLen = dv.getUint16(lho + 28, true);
+      const dataStart = lho + 30 + lNameLen + lExtraLen;
+      list.push({ name, method, comp: bytes.subarray(dataStart, dataStart + compSize) });
+      p += 46 + nameLen + extraLen + commentLen;
+    }
+    return list;
+  }
+  async function inflateEntry(e) {
+    if (e.method === 0) return e.comp;
+    if (typeof DecompressionStream === "undefined") throw new Error("Trình duyệt không hỗ trợ đọc .xlsx nén — hãy dán dữ liệu hoặc dùng .csv");
+    const ds = new DecompressionStream("deflate-raw");
+    const stream = new Response(e.comp).body.pipeThrough(ds);
+    return new Uint8Array(await new Response(stream).arrayBuffer());
+  }
+  function siText(si) { return [...si.matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map(m => unesc(m[1])).join(""); }
+  function colIdx(ref) { const m = (ref.match(/^([A-Z]+)/) || ["", ""])[1]; let n = 0; for (const ch of m) n = n * 26 + (ch.charCodeAt(0) - 64); return n - 1; }
+  function sheetToRows(xml, shared) {
+    const rows = [];
+    for (const rm of xml.matchAll(/<row\b[^>]*>([\s\S]*?)<\/row>/g)) {
+      const arr = []; let auto = 0;
+      for (const cm of rm[1].matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
+        const attrs = cm[1], inner = cm[2] || "";
+        const ref = (attrs.match(/r="([^"]+)"/) || [])[1] || "";
+        const t = (attrs.match(/t="([^"]+)"/) || [])[1] || "";
+        const ci = ref ? colIdx(ref) : auto;
+        let val = "";
+        if (t === "inlineStr") { const im = inner.match(/<t[^>]*>([\s\S]*?)<\/t>/); val = im ? unesc(im[1]) : ""; }
+        else { const vm = inner.match(/<v[^>]*>([\s\S]*?)<\/v>/); const raw = vm ? vm[1] : ""; val = t === "s" ? (shared[+raw] || "") : unesc(raw); }
+        arr[ci] = val; auto = ci + 1;
+      }
+      rows.push(arr);
+    }
+    return rows;
+  }
+  async function readXlsx(buf) {
+    const list = readZipEntries(buf);
+    const get = n => list.find(e => e.name === n);
+    const text = async n => { const e = get(n); return e ? new TextDecoder("utf-8").decode(await inflateEntry(e)) : ""; };
+    const wb = await text("xl/workbook.xml");
+    const rels = await text("xl/_rels/workbook.xml.rels");
+    let sheetPath = "xl/worksheets/sheet1.xml";
+    const firstSheet = (wb.match(/<sheet\b[^>]*>/) || [])[0] || "";
+    const rid = (firstSheet.match(/r:id="([^"]+)"/) || [])[1];
+    if (rid) {
+      for (const tg of (rels.match(/<Relationship\b[^>]*>/g) || [])) {
+        if (new RegExp('Id="' + rid + '"').test(tg)) { const m = tg.match(/Target="([^"]+)"/); if (m) { let t = m[1].replace(/^\//, ""); sheetPath = t.indexOf("xl/") === 0 ? t : "xl/" + t; } break; }
+      }
+    }
+    if (!get(sheetPath)) sheetPath = "xl/worksheets/sheet1.xml";
+    const sheetXml = await text(sheetPath);
+    let shared = [];
+    if (get("xl/sharedStrings.xml")) { const sx = await text("xl/sharedStrings.xml"); shared = [...sx.matchAll(/<si\b[^>]*>([\s\S]*?)<\/si>/g)].map(m => siText(m[1])); }
+    return sheetToRows(sheetXml, shared);
+  }
+
   async function importModal(preClassId) {
     const ov = document.createElement("div"); ov.className = "sm-ov";
     ov.innerHTML = `<div class="sm-modal"><div class="mh"><h3>📥 Nhập học viên hàng loạt</h3><button class="btn ghost" data-x="close">✕</button></div>
@@ -571,7 +652,7 @@ window.Students = (function () {
         <p class="muted" style="font-size:.82rem;margin:0 0 .5rem;">Chỉ <b>Họ và tên</b> bắt buộc; ô khác để trống thoải mái. Dòng tiêu đề tự bỏ qua.</p>
         <textarea id="imp-text" style="min-height:140px;font-family:ui-monospace,monospace;font-size:.82rem;" placeholder="Nguyễn Văn An&#9;01/09/2010&#9;Nam&#9;${SM.esc(classes[0] ? classes[0].name : "HSK 1")}&#10;Trần Thị Bích&#9;15/03/2011&#9;Nữ"></textarea>
         <div class="toolbar" style="margin-top:.5rem;align-items:center;">
-          <label class="btn ghost" style="cursor:pointer;">📄 Chọn tệp CSV<input type="file" id="imp-file" accept=".csv,.tsv,.txt" hidden></label>
+          <label class="btn ghost" style="cursor:pointer;">📄 Chọn tệp (Excel/CSV)<input type="file" id="imp-file" accept=".xlsx,.csv,.tsv,.txt" hidden></label>
           <span style="flex:1"></span>
           <button class="btn" id="imp-preview">Xem trước →</button>
         </div>
@@ -584,8 +665,13 @@ window.Students = (function () {
       });
       body.querySelector("#imp-file").addEventListener("change", async e => {
         const f = e.target.files[0]; if (!f) return;
-        if (/\.xlsx$/i.test(f.name)) { msg.textContent = "File .xlsx không đọc trực tiếp được — hãy mở file, Copy các dòng rồi Dán vào ô, hoặc lưu thành .csv."; msg.className = "msg err"; e.target.value = ""; return; }
-        body.querySelector("#imp-text").value = await f.text();
+        if (/\.xlsx$/i.test(f.name)) {   // đọc trực tiếp file Excel → sang bước xem trước
+          body.innerHTML = `<div class="card placeholder"><span class="spinner"></span></div>`;
+          try { parsed = await parseXlsxFile(f, selClass, classes); step2(); }
+          catch (err) { step1(); const m2 = body.querySelector("#imp-msg"); if (m2) { m2.textContent = "Không đọc được file Excel: " + (err.message || err); m2.className = "msg err"; } }
+          return;
+        }
+        body.querySelector("#imp-text").value = await f.text();   // csv/txt: đổ vào ô để xem lại
       });
       body.querySelector("#imp-preview").addEventListener("click", async () => {
         const text = body.querySelector("#imp-text").value;
@@ -679,7 +765,7 @@ window.Students = (function () {
 
   return {
     _import: { parseDelimited, parseAndValidate, mapGender, normPhone, normName },   // để kiểm thử
-    _buildXlsx: buildXlsx,
+    _buildXlsx: buildXlsx, _readXlsx: readXlsx, _sheetToRows: sheetToRows,
     render(el, me) { ME = me; box = el; load(); }
   };
 })();

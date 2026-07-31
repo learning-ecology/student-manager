@@ -21,8 +21,7 @@ window.Classes = (function () {
   const cls = id => classes.find(c => c.id === id) || {};
 
   async function loadTeachers() {
-    const { data } = await sb.from("teachers").select("id, full_name").is("archived_at", null).order("full_name");
-    teachers = data || [];
+    teachers = await SM.refTeachers();
   }
 
   async function loadClasses() {
@@ -34,9 +33,10 @@ window.Classes = (function () {
     query = query.order(stL.sortKey, { ascending: stL.sortDir === "asc" });
     const from = (stL.page - 1) * stL.per;
     query = query.range(from, from + stL.per - 1);
-    const { data, count, error } = await query;
-    // sĩ số hiện tại của mọi lớp (đang hoạt động)
-    const en = await sb.from("enrollments").select("class_id").eq("status", "active");
+    const [{ data, count, error }, en] = await Promise.all([
+      query,
+      sb.from("enrollments").select("class_id").eq("status", "active")
+    ]);
     counts = {}; (en.data || []).forEach(r => { counts[r.class_id] = (counts[r.class_id] || 0) + 1; });
     busy = false;
     if (error) { SM.toast("Lỗi tải lớp: " + error.message, "err"); classes = []; totalC = 0; }
@@ -155,7 +155,7 @@ window.Classes = (function () {
       const selEl = ov.querySelector("#c-teacher");
       selEl.innerHTML = `<option value="">— chưa gán —</option>` + teachers.map(t => `<option value="${t.id}">${SM.esc(t.full_name)}</option>`).join("");
       selEl.value = data.id;
-      SM.toast("✓ Đã thêm giáo viên", "ok");
+      SM.invalidate("teachers"); SM.toast("✓ Đã thêm giáo viên", "ok");
     };
     ov.querySelector("#c-save").addEventListener("click", () => saveClass(ov, c));
   }
@@ -187,7 +187,7 @@ window.Classes = (function () {
     else ({ error } = await sb.from("classes").insert(row));
     ov.querySelector("#c-save").disabled = false;
     if (error) return say("Không lưu được: " + error.message, true);
-    ov.remove(); SM.toast("✓ Đã lưu lớp", "ok"); loadClasses();
+    ov.remove(); SM.toast("✓ Đã lưu lớp", "ok"); SM.invalidate("classes"); loadClasses();
   }
   async function duplicateClass(id) {
     const c = cls(id);
@@ -196,7 +196,7 @@ window.Classes = (function () {
       tuition_method: c.tuition_method, tuition_amount: c.tuition_amount, notes: c.notes };
     const { error } = await sb.from("classes").insert(copy);
     if (error) return SM.toast("Không nhân bản được: " + error.message, "err");
-    SM.toast("✓ Đã nhân bản lớp (không kèm học viên/lịch)", "ok"); loadClasses();
+    SM.toast("✓ Đã nhân bản lớp (không kèm học viên/lịch)", "ok"); SM.invalidate("classes"); loadClasses();
   }
   async function archiveClass(id, on) {
     const c = cls(id), n = counts[id] || 0;
@@ -205,7 +205,7 @@ window.Classes = (function () {
     if (!ok) return;
     const { error } = await sb.from("classes").update({ archived_at: on ? new Date().toISOString() : null }).eq("id", id);
     if (error) return SM.toast("Lỗi: " + error.message, "err");
-    SM.toast(on ? "🗄️ Đã lưu trữ" : "↩ Đã khôi phục", "ok"); loadClasses();
+    SM.toast(on ? "🗄️ Đã lưu trữ" : "↩ Đã khôi phục", "ok"); SM.invalidate("classes"); loadClasses();
   }
 
   /* ---------------- ROSTER ---------------- */

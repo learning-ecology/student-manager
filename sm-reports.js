@@ -229,8 +229,7 @@ window.Reports = (function () {
       if (!st.from) { const d = new Date(); st.from = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-01"; st.to = SM.todayISO(); }
       box.onclick = onClick; lastExport = null;
       box.innerHTML = `<div class="card placeholder"><span class="spinner"></span></div>`;
-      const { data } = await sb.from("classes").select("id,name").is("archived_at", null).order("name");
-      classes = data || [];
+      classes = await SM.refClasses();
       run();
     }
   };

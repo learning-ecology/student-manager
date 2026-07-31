@@ -28,15 +28,14 @@ window.Dashboard = (function () {
       sb.from("sessions").select("id,class_id,teacher_id,start_time,end_time,status,type").eq("date", today).neq("status", "cancelled").order("start_time"),
       sb.from("invoices").select("id,student_id,total,status,due_date").in("status", ["unpaid", "partially_paid", "paid", "overdue"]),
       sb.from("payments").select("student_id,invoice_id,amount,is_refund,paid_on"),
-      sb.from("classes").select("id,name"),
-      sb.from("teachers").select("id,full_name")
+      SM.refClasses(), SM.refTeachers()
     ]);
 
     const sessions = sessR.data || [];
     const invoices = invR.data || [];
     const payments = payR.data || [];
-    const classMap = {}; (classesR.data || []).forEach(c => classMap[c.id] = c.name);
-    const teachMap = {}; (teachersR.data || []).forEach(t => teachMap[t.id] = t.full_name);
+    const classMap = {}; (classesR || []).forEach(c => classMap[c.id] = c.name);
+    const teachMap = {}; (teachersR || []).forEach(t => teachMap[t.id] = t.full_name);
 
     // điểm danh hôm nay
     let marked = new Set();

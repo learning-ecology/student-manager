@@ -96,5 +96,34 @@ const SM = (function () {
 
   const roleLabel = r => ({ owner: "Chủ sở hữu", admin: "Quản trị", teacher: "Giáo viên" }[r] || r);
 
-  return { esc, vnd, vndPlain, dmy, dmyhm, hm, todayISO, parseDmy, WEEKDAYS, toast, confirmDialog, requireAuth, roleLabel, TZ };
+  // ---- Cache dữ liệu tham chiếu (lớp/giáo viên/cài đặt) ----
+  //  Nhiều trang cùng cần danh sách lớp/giáo viên. Cache lại để KHÔNG tải
+  //  lặp lại mỗi lần chuyển trang. Ghi (thêm/sửa/xóa lớp, GV, cài đặt) gọi
+  //  SM.invalidate(...) để làm mới. Đồng thời gộp các yêu cầu trùng lúc.
+  const _rc = {};
+  function _cache(key, fetcher, ttl) {
+    const c = _rc[key];
+    if (c && Date.now() - c.t < (ttl || 60000)) return c.p;
+    const p = Promise.resolve().then(fetcher).catch(err => { delete _rc[key]; throw err; });
+    _rc[key] = { p, t: Date.now() };
+    return p;
+  }
+  const invalidate = key => { if (key === undefined) { for (const k in _rc) delete _rc[k]; } else delete _rc[key]; };
+  const refClasses = () => _cache("classes", async () => {
+    const { data } = await sb.from("classes")
+      .select("id,name,teacher_id,room,online_link,start_date,end_date,status,subject,max_students,tuition_method,tuition_amount,billing_cycle,billing_start,billing_include_future")
+      .is("archived_at", null).order("name");
+    return data || [];
+  });
+  const refTeachers = () => _cache("teachers", async () => {
+    const { data } = await sb.from("teachers").select("id,full_name").is("archived_at", null).order("full_name");
+    return data || [];
+  });
+  const refSettings = () => _cache("settings", async () => {
+    const { data } = await sb.from("settings").select("*").limit(1).maybeSingle();
+    return data || null;
+  }, 300000);
+
+  return { esc, vnd, vndPlain, dmy, dmyhm, hm, todayISO, parseDmy, WEEKDAYS, toast, confirmDialog, requireAuth, roleLabel, TZ,
+           refClasses, refTeachers, refSettings, invalidate };
 })();

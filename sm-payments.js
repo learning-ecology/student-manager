@@ -418,7 +418,7 @@ window.Payments = (function () {
     async render(el, me) {
       ME = me; box = el;
       if (!st.from) { const d = new Date(); st.from = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-01"; st.to = SM.todayISO(); }
-      const { data: s } = await sb.from("settings").select("center_name").limit(1).maybeSingle();
+      const s = await SM.refSettings();
       if (s && s.center_name) CENTER = s.center_name;
       box.onclick = onClick; curLedger = null;
       box.innerHTML = `<div class="card placeholder"><span class="spinner"></span></div>`;

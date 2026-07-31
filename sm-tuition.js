@@ -738,8 +738,7 @@ window.Tuition = (function () {
       if (!st.year) { const d = new Date(); st.year = d.getFullYear(); st.month = d.getMonth() + 1; }
       box.onclick = onClick;
       box.innerHTML = `<div class="card placeholder"><span class="spinner"></span></div>`;
-      const { data } = await sb.from("classes").select("id,name,tuition_method,tuition_amount,status,billing_cycle,billing_start,billing_include_future").is("archived_at", null).order("name");
-      classes = data || [];
+      classes = await SM.refClasses();
       if (st.tab === "rates") paintRates(); else loadInvoices();
     }
   };

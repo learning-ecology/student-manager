@@ -43,11 +43,10 @@ window.Schedule = (function () {
   /* ---------------- tải dữ liệu ---------------- */
   async function loadStatic() {
     const [c, t, h] = await Promise.all([
-      sb.from("classes").select("id,name,teacher_id,room,online_link,start_date,end_date,status").is("archived_at", null).order("name"),
-      sb.from("teachers").select("id,full_name").is("archived_at", null).order("full_name"),
+      SM.refClasses(), SM.refTeachers(),
       sb.from("holidays").select("*").order("date")
     ]);
-    classes = c.data || []; teachers = t.data || []; holidays = h.data || [];
+    classes = c; teachers = t; holidays = h.data || [];
   }
   async function loadScheds() {
     const { data, error } = await sb.from("class_schedules").select("*").order("weekday").order("start_time");

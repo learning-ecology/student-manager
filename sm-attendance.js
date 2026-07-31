@@ -40,10 +40,9 @@ window.Attendance = (function () {
   /* ---------------- tải nền ---------------- */
   async function loadStatic() {
     const [c, t] = await Promise.all([
-      sb.from("classes").select("id,name,teacher_id,room,status,start_date,end_date").is("archived_at", null).order("name"),
-      sb.from("teachers").select("id,full_name").is("archived_at", null).order("full_name")
+      SM.refClasses(), SM.refTeachers()
     ]);
-    classes = c.data || []; teachers = t.data || [];
+    classes = c; teachers = t;
   }
 
   /* ================= TAB 1 — ĐIỂM DANH THEO NGÀY ================= */
@@ -54,22 +53,18 @@ window.Attendance = (function () {
     const { data: sess, error } = await q;
     daySessions = error ? [] : (sess || []);
     // ghi danh của các lớp có buổi hôm đó
+    // ghi danh (các lớp có buổi hôm đó) + điểm danh đã ghi — chạy SONG SONG
     const classIds = [...new Set(daySessions.map(s => s.class_id))];
-    dayEnroll = {};
-    if (classIds.length) {
-      const { data: en } = await sb.from("enrollments").select("class_id,student_id,joined_on,left_on").in("class_id", classIds);
-      (en || []).forEach(e => { (dayEnroll[e.class_id] = dayEnroll[e.class_id] || []).push(e); });
-    }
-    // điểm danh đã ghi cho các buổi hôm đó
-    dayAtt = {};
     const sessIds = daySessions.map(s => s.id);
-    if (sessIds.length) {
-      const { data: at } = await sb.from("attendance").select("session_id,status").in("session_id", sessIds);
-      (at || []).forEach(a => {
-        const b = dayAtt[a.session_id] = dayAtt[a.session_id] || { recorded: 0, present: 0 };
-        b.recorded++; if (ATTENDED.has(a.status)) b.present++;
-      });
-    }
+    const [enR, atR] = await Promise.all([
+      classIds.length ? sb.from("enrollments").select("class_id,student_id,joined_on,left_on").in("class_id", classIds) : Promise.resolve({ data: [] }),
+      sessIds.length ? sb.from("attendance").select("session_id,status").in("session_id", sessIds) : Promise.resolve({ data: [] })
+    ]);
+    dayEnroll = {}; (enR.data || []).forEach(e => { (dayEnroll[e.class_id] = dayEnroll[e.class_id] || []).push(e); });
+    dayAtt = {}; (atR.data || []).forEach(a => {
+      const b = dayAtt[a.session_id] = dayAtt[a.session_id] || { recorded: 0, present: 0 };
+      b.recorded++; if (ATTENDED.has(a.status)) b.present++;
+    });
     busy = false;
     if (st.tab === "mark" && !cur) paintDay();
   }

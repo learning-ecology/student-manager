@@ -4,7 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Quản lý học viên</title>
-  <link rel="stylesheet" href="sm.css?v=18">
+  <link rel="preconnect" href="https://zrmgunriwvcjppjykngk.supabase.co" crossorigin>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="stylesheet" href="sm.css?v=19">
   <script>try{if(localStorage.getItem("sm_theme")==="dark")document.documentElement.setAttribute("data-theme","dark");}catch(e){}</script>
 </head>
 <body>
@@ -46,19 +48,19 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=18"></script>
-  <script src="sm-lib.js?v=18"></script>
-  <script src="sm-students.js?v=18"></script>
-  <script src="sm-classes.js?v=18"></script>
-  <script src="sm-schedule.js?v=18"></script>
-  <script src="sm-attendance.js?v=18"></script>
-  <script src="sm-tuition.js?v=18"></script>
-  <script src="sm-payments.js?v=18"></script>
-  <script src="sm-dashboard.js?v=18"></script>
-  <script src="sm-reports.js?v=18"></script>
-  <script src="sm-audit.js?v=18"></script>
-  <script src="sm-tenants.js?v=18"></script>
-  <script src="sm-handbook.js?v=18"></script>
+  <script src="config.js?v=19"></script>
+  <script src="sm-lib.js?v=19"></script>
+  <script src="sm-students.js?v=19"></script>
+  <script src="sm-classes.js?v=19"></script>
+  <script src="sm-schedule.js?v=19"></script>
+  <script src="sm-attendance.js?v=19"></script>
+  <script src="sm-tuition.js?v=19"></script>
+  <script src="sm-payments.js?v=19"></script>
+  <script src="sm-dashboard.js?v=19"></script>
+  <script src="sm-reports.js?v=19"></script>
+  <script src="sm-audit.js?v=19"></script>
+  <script src="sm-tenants.js?v=19"></script>
+  <script src="sm-handbook.js?v=19"></script>
   <script>
     const $ = id => document.getElementById(id);
     let ME = null, SETTINGS = null;
@@ -88,7 +90,7 @@
 
     async function renderSettings() {
       $("content").innerHTML = `<h1>Cài đặt</h1><div class="card placeholder"><span class="spinner"></span></div>`;
-      const { data: s } = await sb.from("settings").select("*").limit(1).maybeSingle();
+      const s = await SM.refSettings();
       SETTINGS = s || SETTINGS || {};
       const owner = ME.profile.role === "owner";
       $("content").innerHTML = `
@@ -117,6 +119,7 @@
         const { error } = await sb.from("settings").upsert({ tenant_id: ME.profile.tenant_id, center_name: name, billing_day: billing, updated_at: new Date().toISOString() }, { onConflict: "tenant_id" });
         $("st-save").disabled = false;
         if (error) { msg.textContent = "Không lưu được: " + error.message; msg.className = "msg err"; return; }
+        SM.invalidate("settings");
         SETTINGS.center_name = name; SETTINGS.billing_day = billing;
         $("brandName").textContent = name || "Quản lý học viên";
         msg.textContent = "✓ Đã lưu."; msg.className = "msg";
@@ -161,7 +164,7 @@
       ME = await SM.requireAuth();
       if (!ME) return;                       // redirected to login
       // settings theo tenant (RLS tự lọc → mỗi workspace 1 dòng)
-      const { data: s } = await sb.from("settings").select("*").limit(1).maybeSingle();
+      const s = await SM.refSettings();
       SETTINGS = s || { center_name: "Quản lý học viên", billing_day: 1 };
       $("brandName").textContent = SETTINGS.center_name || "Quản lý học viên";
       $("whoName").textContent = (ME.profile.full_name || ME.user.email) + " · " + SM.roleLabel(ME.profile.role);

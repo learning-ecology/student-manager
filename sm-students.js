@@ -634,8 +634,7 @@ window.Students = (function () {
     const body = ov.querySelector("#imp-body");
     let parsed = [], selClass = preClassId || "";
     // các lớp của giáo viên (RLS đã lọc theo tenant)
-    const { data: clsData } = await sb.from("classes").select("id,name").is("archived_at", null).order("name");
-    const classes = clsData || [];
+    const classes = await SM.refClasses();
     const clsName = id => (classes.find(c => c.id === id) || {}).name || "";
 
     function step1() {

@@ -193,6 +193,39 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--accent-soft);bor
 .inv-lines tr.tot td{font-weight:800;font-size:1.05rem;border-bottom:0;padding-top:.2rem;}
 .inv-lines tr:last-child td{border-bottom:0;}
 
+/* ---- hướng dẫn sử dụng (handbook) ---- */
+.hb-head{display:flex;gap:.7rem;align-items:center;flex-wrap:wrap;margin-bottom:1rem;scroll-margin-top:80px;}
+.hb-head h1{margin:0;}
+.hb-search{min-width:200px;}
+.hb-body{display:grid;grid-template-columns:250px 1fr;gap:1.4rem;align-items:start;}
+.hb-toc{position:sticky;top:76px;max-height:calc(100vh - 96px);overflow:auto;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:.5rem;}
+.hb-toc a{display:block;padding:.38rem .55rem;border-radius:8px;color:var(--ink);text-decoration:none;font-size:.9rem;line-height:1.35;cursor:pointer;}
+.hb-toc a:hover{background:var(--accent-soft);}
+.hb-toc a.on{background:var(--accent);color:#fff;font-weight:700;}
+.hb-toc-toggle,#hb-toctoggle{display:none;}
+.hb-content{min-width:0;}
+.hb-sec{margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid var(--line);}
+.hb-sec:last-child{border-bottom:0;}
+.hb-sec h2{font-size:1.2rem;margin:.2rem 0 .6rem;scroll-margin-top:78px;font-family:var(--serif);}
+.hb-sec p{margin:.35rem 0;} .hb-sec ol,.hb-sec ul{margin:.3rem 0 .6rem 1.25rem;} .hb-sec li{margin:.2rem 0;}
+.hb-note{background:var(--good-bg);border-left:4px solid var(--good);border-radius:8px;padding:.55rem .8rem;margin:.6rem 0;}
+.hb-warn{background:var(--warn-bg);border-left:4px solid var(--warn);border-radius:8px;padding:.55rem .8rem;margin:.6rem 0;}
+.hb-top{display:inline-block;margin-top:.5rem;color:var(--accent);cursor:pointer;font-size:.85rem;font-weight:700;}
+.hb-kbd{background:var(--accent-soft);border:1px solid var(--line);border-radius:6px;padding:0 .35rem;font-weight:700;}
+@media(max-width:820px){
+  .hb-body{grid-template-columns:1fr;}
+  .hb-toc{position:static;max-height:none;display:none;margin-bottom:.8rem;}
+  .hb-toc.open{display:block;}
+  #hb-toctoggle{display:inline-block;}
+  .hb-search{flex:1;}
+}
+@media print{
+  .sm-side,.sm-top,.imp-bar,.hb-tools,.hb-toc,.hb-top{display:none !important;}
+  .sm-app{display:block;} .sm-content{max-width:none;padding:0;}
+  .hb-body{display:block;} .hb-sec{page-break-inside:avoid;border-bottom:1px solid #ccc;}
+  a{color:#000;text-decoration:none;} .hb-note,.hb-warn{border-color:#999;}
+}
+
 /* ---- biểu ngữ đăng nhập hộ (impersonate) ---- */
 .imp-bar{position:fixed;left:0;right:0;bottom:0;z-index:200;background:var(--gold);color:#fff;
   text-align:center;padding:.5rem 1rem;font-size:.9rem;box-shadow:0 -6px 20px -12px rgba(0,0,0,.5);}

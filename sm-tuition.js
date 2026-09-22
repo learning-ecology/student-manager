@@ -495,12 +495,13 @@ window.Tuition = (function () {
     const units = [...new Set(lessons.filter(l => l.lesson_date).map(l => l.unit_amount))];
     const chargeCount = perSession ? lessons.filter(l => l.lesson_date).length : lessons.length;
     const tag = d => /bù/.test(d || "") ? "Buổi bù" : /thêm/.test(d || "") ? "Buổi thêm" : "";
+    const WD = iso => { if (!iso) return ""; const d = new Date(iso + "T00:00:00").getDay(); return d === 0 ? "CN" : "T" + (d + 1); };
     const rows = lessons.map(l => ({
         key: l.lesson_date || "￿" + (l.description || ""),
-        date: l.lesson_date ? D(l.lesson_date) : S(l.description || ""),
+        date: l.lesson_date ? D(l.lesson_date) : S(l.description || ""), wd: WD(l.lesson_date),
         cancelled: false, status: l.lesson_date ? "Đã học" : "", note: l.lesson_date ? tag(l.description) : "", fee: l.amount
       })).concat(cancels.map(l => ({
-        key: l.lesson_date || "", date: l.lesson_date ? D(l.lesson_date) : S(l.description || ""),
+        key: l.lesson_date || "", date: l.lesson_date ? D(l.lesson_date) : S(l.description || ""), wd: WD(l.lesson_date),
         cancelled: true, status: "Đã hủy", note: (l.note || "").trim(), fee: 0
       }))).sort((a, b) => a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
 
@@ -512,6 +513,7 @@ window.Tuition = (function () {
       const fee = r.cancelled ? `<span style="color:#b3261e;">0đ</span>` : V(r.fee);
       return `<tr style="${bg}${r.cancelled ? "color:#b3261e;" : ""}">
         <td style="padding:7px 8px;border-bottom:1px solid #eef0f2;white-space:nowrap;">${r.date}</td>
+        <td style="padding:7px 8px;border-bottom:1px solid #eef0f2;text-align:center;white-space:nowrap;${r.cancelled ? "" : "color:#6b7280;"}">${r.wd}</td>
         <td style="padding:7px 8px;border-bottom:1px solid #eef0f2;">${badge}</td>
         <td style="padding:7px 8px;border-bottom:1px solid #eef0f2;color:#6b7280;">${S(r.note)}</td>
         <td style="padding:7px 8px;border-bottom:1px solid #eef0f2;text-align:right;white-space:nowrap;font-weight:600;">${fee}</td>
@@ -538,6 +540,7 @@ window.Tuition = (function () {
       ${rows.length ? `<table style="width:100%;border-collapse:collapse;font-size:13px;">
         <thead><tr style="background:#0e7490;color:#fff;">
           <th style="padding:8px;text-align:left;font-weight:600;">Ngày</th>
+          <th style="padding:8px;text-align:center;font-weight:600;width:42px;">Thứ</th>
           <th style="padding:8px;text-align:left;font-weight:600;">Trạng thái</th>
           <th style="padding:8px;text-align:left;font-weight:600;">Ghi chú</th>
           <th style="padding:8px;text-align:right;font-weight:600;">Học phí</th></tr></thead>

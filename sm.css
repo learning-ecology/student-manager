@@ -249,6 +249,18 @@ body.printing .receipt-print{position:fixed;left:0;top:0;width:100%;padding:2rem
   body.printing .sm-ov{position:static;background:none;padding:0;}
 }
 
+/* ---- hóa đơn phụ huynh: xem trước + xuất PDF/PNG ---- */
+.inv-doc-wrap{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.06);}
+.inv-doc-wrap .inv-doc{color:#1f2937;}
+#inv-print{display:none;}
+@media print{
+  body.printing-inv *{visibility:hidden !important;}
+  body.printing-inv #inv-print, body.printing-inv #inv-print *{visibility:visible !important;}
+  body.printing-inv #inv-print{display:block !important;position:fixed;left:0;top:0;width:100%;padding:8mm;background:#fff;}
+  body.printing-inv .sm-ov{position:static;background:none;padding:0;}
+  .inv-doc{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+}
+
 /* auth page */
 .auth-wrap{min-height:100vh;display:grid;place-items:center;padding:1.2rem;
   background:linear-gradient(135deg,#eaf1fb,#f6f1e8);}

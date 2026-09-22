@@ -70,37 +70,48 @@ window.Tuition = (function () {
     const sorted = (rates || []).slice().sort((a, b) => a.effective_from < b.effective_from ? -1 : 1);
     const rateFor = d => { let r = null; for (const x of sorted) { if (x.effective_from <= d) r = x; else break; } return r; };
     const flagsOf = r => r || DEFAULT_FLAGS;
-    const lines = [], skipped = [];
+    const lines = [], skipped = [], cancelled = [];
     let subtotal = 0;
+    const typeTag = s => (s.type === "makeup" ? " · bù" : s.type === "extra" ? " · thêm" : "");
+    const bySess = (a, b) => a.date === b.date ? (a.start_time < b.start_time ? -1 : 1) : (a.date < b.date ? -1 : 1);
+    // buổi đã hủy → dòng hiển thị 0đ kèm lý do (lấy từ Lịch học), không cộng vào tiền
+    const pushCancel = s => cancelled.push({ kind: "cancelled", quantity: 1, unit_amount: 0, amount: 0,
+      lesson_date: s.date, note: (s.note || "").trim(),
+      description: fmtDate(s.date) + typeTag(s) });
 
     if (PER_SESSION.has(method) && chargeSet) {
       // CHỌN TAY: tính đúng các buổi đã tick (bỏ buổi hủy), không phụ thuộc điểm danh/ngày ghi danh.
-      const list = (sessions || []).filter(s => chargeSet.has(s.id) && s.status !== "cancelled")
-        .sort((a, b) => a.date === b.date ? (a.start_time < b.start_time ? -1 : 1) : (a.date < b.date ? -1 : 1));
+      const list = (sessions || []).filter(s => chargeSet.has(s.id) && s.status !== "cancelled").sort(bySess);
       for (const s of list) {
         const r = rateFor(s.date);
         const unit = (enr.tuition_override > 0 ? enr.tuition_override : (r ? r.amount : c.tuition_amount)) || 0;
         subtotal += unit;
-        lines.push({ kind: "lesson", quantity: 1, unit_amount: unit, amount: unit,
-          description: fmtDate(s.date) + (s.type === "makeup" ? " · bù" : s.type === "extra" ? " · thêm" : "") });
+        lines.push({ kind: "lesson", quantity: 1, unit_amount: unit, amount: unit, lesson_date: s.date,
+          description: fmtDate(s.date) + typeTag(s) });
       }
+      // các buổi hủy trong khoảng đã nạp → hiện để phụ huynh đối chiếu (0đ)
+      (sessions || []).filter(s => s.status === "cancelled").sort(bySess).forEach(pushCancel);
     } else if (PER_SESSION.has(method)) {
-      const inWin = (sessions || []).filter(s => s.date >= winStart && s.date <= winEnd)
-        .sort((a, b) => a.date === b.date ? (a.start_time < b.start_time ? -1 : 1) : (a.date < b.date ? -1 : 1));
+      const inWin = (sessions || []).filter(s => s.date >= winStart && s.date <= winEnd).sort(bySess);
       for (const s of inWin) {
         const r = rateFor(s.date), f = flagsOf(r);
-        let eff;
-        if (s.status === "cancelled") eff = "cancelled";
-        else {
-          const rec = attMap[s.id];
-          if (rec) eff = rec;
-          else if (method === "per_attended") { skipped.push({ date: s.date, reason: "chưa điểm danh" }); continue; }
-          else eff = "present";                       // per_scheduled: chưa điểm danh coi như có mặt
+        if (s.status === "cancelled") {
+          if (!f.charge_cancelled) { pushCancel(s); continue; }
+          // hiếm: cấu hình vẫn tính tiền buổi hủy
+          const unit0 = (enr.tuition_override > 0 ? enr.tuition_override : (r ? r.amount : c.tuition_amount)) || 0;
+          subtotal += unit0;
+          lines.push({ kind: "lesson", quantity: 1, unit_amount: unit0, amount: unit0, lesson_date: s.date,
+            description: fmtDate(s.date) + " · Hủy (có tính phí)" });
+          continue;
         }
+        let eff;
+        const rec = attMap[s.id];
+        if (rec) eff = rec;
+        else if (method === "per_attended") { skipped.push({ date: s.date, reason: "chưa điểm danh" }); continue; }
+        else eff = "present";                       // per_scheduled: chưa điểm danh coi như có mặt
         let charge;
         if (s.type === "extra") charge = f.charge_extra;
         else if (s.type === "makeup") charge = f.charge_makeup;
-        else if (eff === "cancelled") charge = f.charge_cancelled;
         else if (eff === "present" || eff === "late" || eff === "left_early" || eff === "makeup") charge = f.charge_present;
         else if (eff === "authorised_absence") charge = f.charge_authorised_absence;
         else if (eff === "unauthorised_absence") charge = f.charge_unauthorised_absence;
@@ -108,7 +119,7 @@ window.Tuition = (function () {
         if (!charge) { skipped.push({ date: s.date, reason: "không tính (" + (ATT_SHORT[eff] || eff) + ")" }); continue; }
         const unit = (enr.tuition_override > 0 ? enr.tuition_override : (r ? r.amount : c.tuition_amount)) || 0;
         subtotal += unit;
-        lines.push({ kind: "lesson", quantity: 1, unit_amount: unit, amount: unit,
+        lines.push({ kind: "lesson", quantity: 1, unit_amount: unit, amount: unit, lesson_date: s.date,
           description: fmtDate(s.date) + " · " + (ATT_SHORT[eff] || eff) + (s.type === "makeup" ? " (bù)" : s.type === "extra" ? " (thêm)" : "") });
       }
     } else if (method === "fixed_monthly" || method === "custom") {
@@ -132,13 +143,13 @@ window.Tuition = (function () {
     if (discount > 0) other.push({ kind: "discount", quantity: 1, unit_amount: -discount, amount: -discount,
       description: "Giảm giá" + (dparts.length ? " (" + dparts.join(" + ") + ")" : "") + (enr.scholarship_note ? " · " + enr.scholarship_note : "") });
 
-    return { subtotal, discount, total: subtotal - discount, lines, other, skipped, winStart, winEnd };
+    return { subtotal, discount, total: subtotal - discount, lines, other, cancelled, skipped, winStart, winEnd };
   }
 
   /* ============ TẢI DỮ LIỆU ĐỂ TÍNH 1 LỚP ============ */
   async function loadClassBilling(classId, from, to) {
     const [sess, rates] = await Promise.all([
-      sb.from("sessions").select("id,date,start_time,end_time,type,status").eq("class_id", classId).gte("date", from).lte("date", to).order("date"),
+      sb.from("sessions").select("id,date,start_time,end_time,type,status,note").eq("class_id", classId).gte("date", from).lte("date", to).order("date"),
       sb.from("tuition_rates").select("*").eq("class_id", classId).order("effective_from")
     ]);
     return { sessions: sess.data || [], rates: rates.data || [] };
@@ -189,7 +200,7 @@ window.Tuition = (function () {
       await sb.from("invoices").update({ status: "draft", bill_to: billTo, period_year: py, period_month: pm, updated_at: now }).eq("id", invId);
       await sb.from("invoice_lines").delete().eq("invoice_id", invId);
     }
-    const allLines = r.lines.concat(r.other).map(l => ({ invoice_id: invId, kind: l.kind, description: l.description, quantity: l.quantity, unit_amount: l.unit_amount, amount: l.amount }));
+    const allLines = r.lines.concat(r.cancelled || []).concat(r.other).map(l => ({ invoice_id: invId, kind: l.kind, description: l.description, quantity: l.quantity, unit_amount: l.unit_amount, amount: l.amount, lesson_date: l.lesson_date || null, note: l.note || null }));
     if (allLines.length) { const { error } = await sb.from("invoice_lines").insert(allLines); if (error) throw error; }
     await sb.from("invoices").update({
       subtotal: r.subtotal, discount_total: r.discount, credit_applied: 0, adjustment_total: 0, total: r.total, updated_at: now
@@ -473,6 +484,126 @@ window.Tuition = (function () {
     reload();
   }
 
+  /* ============ HÓA ĐƠN CHO PHỤ HUYNH (xem trước = bản xuất) ============ */
+  // Dựng khối hóa đơn chuyên nghiệp, dễ đọc — dùng chung cho xem trước, PDF và PNG.
+  function invoiceDocHtml(inv, lines, center) {
+    const S = SM.esc, V = SM.vnd, D = SM.dmy;
+    const lessons = (lines || []).filter(l => l.kind === "lesson");
+    const cancels = (lines || []).filter(l => l.kind === "cancelled");
+    const others = (lines || []).filter(l => l.kind !== "lesson" && l.kind !== "cancelled");
+    const perSession = lessons.some(l => l.lesson_date);
+    const units = [...new Set(lessons.filter(l => l.lesson_date).map(l => l.unit_amount))];
+    const chargeCount = perSession ? lessons.filter(l => l.lesson_date).length : lessons.length;
+    const tag = d => /bù/.test(d || "") ? "Buổi bù" : /thêm/.test(d || "") ? "Buổi thêm" : "";
+    const rows = lessons.map(l => ({
+        key: l.lesson_date || "￿" + (l.description || ""),
+        date: l.lesson_date ? D(l.lesson_date) : S(l.description || ""),
+        cancelled: false, status: l.lesson_date ? "Đã học" : "", note: l.lesson_date ? tag(l.description) : "", fee: l.amount
+      })).concat(cancels.map(l => ({
+        key: l.lesson_date || "", date: l.lesson_date ? D(l.lesson_date) : S(l.description || ""),
+        cancelled: true, status: "Đã hủy", note: (l.note || "").trim(), fee: 0
+      }))).sort((a, b) => a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
+
+    const rowHtml = rows.map((r, i) => {
+      const bg = r.cancelled ? "background:#fdecea;" : (i % 2 ? "background:#fafafa;" : "");
+      const badge = r.cancelled
+        ? `<span style="display:inline-block;padding:1px 8px;border-radius:10px;background:#f8c9c0;color:#b3261e;font-weight:700;font-size:11px;">Đã hủy</span>`
+        : (r.status ? `<span style="color:#15803d;font-weight:600;">${S(r.status)}</span>` : "");
+      const fee = r.cancelled ? `<span style="color:#b3261e;">0đ</span>` : V(r.fee);
+      return `<tr style="${bg}${r.cancelled ? "color:#b3261e;" : ""}">
+        <td style="padding:7px 8px;border-bottom:1px solid #eef0f2;white-space:nowrap;">${r.date}</td>
+        <td style="padding:7px 8px;border-bottom:1px solid #eef0f2;">${badge}</td>
+        <td style="padding:7px 8px;border-bottom:1px solid #eef0f2;color:#6b7280;">${S(r.note)}</td>
+        <td style="padding:7px 8px;border-bottom:1px solid #eef0f2;text-align:right;white-space:nowrap;font-weight:600;">${fee}</td>
+      </tr>`;
+    }).join("");
+
+    const sumRow = (lbl, val, opt) => `<tr><td style="padding:4px 8px;color:#374151;">${lbl}</td>
+      <td style="padding:4px 8px;text-align:right;white-space:nowrap;${opt || ""}">${val}</td></tr>`;
+    const period = `${MONTHS[inv.period_month - 1]}/${inv.period_year}`;
+    const range = inv.bill_from && inv.bill_to ? `${D(inv.bill_from)} – ${D(inv.bill_to)}` : "";
+
+    return `<div class="inv-doc" style="max-width:640px;margin:0 auto;background:#fff;color:#1f2937;padding:22px 24px;box-sizing:border-box;font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;line-height:1.5;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;border-bottom:2px solid #0e7490;padding-bottom:10px;margin-bottom:14px;">
+        <div><div style="font-size:18px;font-weight:800;color:#0e7490;">${S(center)}</div>
+          <div style="font-size:12px;color:#6b7280;">Phiếu học phí</div></div>
+        <div style="text-align:right;"><div style="font-size:20px;font-weight:800;letter-spacing:.5px;">HÓA ĐƠN</div>
+          <div style="font-size:12px;color:#6b7280;">Kỳ ${period}</div></div>
+      </div>
+      <table style="width:100%;font-size:13px;margin-bottom:12px;border-collapse:collapse;">
+        <tr><td style="padding:2px 0;color:#6b7280;width:110px;">Học viên</td><td style="padding:2px 0;font-weight:700;">${S(inv.student ? inv.student.full_name : "")}${inv.student && inv.student.code ? ` <span style="color:#9ca3af;font-weight:400;">(${S(inv.student.code)})</span>` : ""}</td></tr>
+        <tr><td style="padding:2px 0;color:#6b7280;">Lớp</td><td style="padding:2px 0;">${S(inv.klass ? inv.klass.name : "")}</td></tr>
+        ${range ? `<tr><td style="padding:2px 0;color:#6b7280;">Khoảng buổi</td><td style="padding:2px 0;">${range}</td></tr>` : ""}
+      </table>
+      ${rows.length ? `<table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead><tr style="background:#0e7490;color:#fff;">
+          <th style="padding:8px;text-align:left;font-weight:600;">Ngày</th>
+          <th style="padding:8px;text-align:left;font-weight:600;">Trạng thái</th>
+          <th style="padding:8px;text-align:left;font-weight:600;">Ghi chú</th>
+          <th style="padding:8px;text-align:right;font-weight:600;">Học phí</th></tr></thead>
+        <tbody>${rowHtml}</tbody></table>`
+      : `<p style="color:#6b7280;font-size:13px;">Không có khoản phí nào trong kỳ này.</p>`}
+      ${cancels.length ? `<p style="font-size:12px;color:#b3261e;margin:8px 0 0;">● ${cancels.length} buổi đã hủy — hiển thị để đối chiếu, <b>không tính phí</b>.</p>` : ""}
+      <div style="display:flex;justify-content:flex-end;margin-top:14px;">
+        <table style="border-collapse:collapse;font-size:13px;min-width:250px;">
+          ${perSession ? sumRow("Số buổi tính phí", `<b>${chargeCount}</b> buổi`) : ""}
+          ${perSession && units.length === 1 ? sumRow("Đơn giá / buổi", V(units[0])) : ""}
+          ${sumRow("Tạm tính", V(inv.subtotal))}
+          ${inv.discount_total ? sumRow("Giảm giá", "−" + V(inv.discount_total), "color:#15803d;") : ""}
+          ${inv.adjustment_total ? sumRow("Điều chỉnh", (inv.adjustment_total < 0 ? "−" : "") + V(Math.abs(inv.adjustment_total))) : ""}
+          <tr><td style="padding:9px 8px;border-top:2px solid #0e7490;font-weight:800;font-size:15px;">PHẢI THANH TOÁN</td>
+            <td style="padding:9px 8px;border-top:2px solid #0e7490;text-align:right;font-weight:800;font-size:16px;color:#0e7490;white-space:nowrap;">${V(inv.total)}</td></tr>
+        </table>
+      </div>
+      <div style="margin-top:16px;border-top:1px solid #e5e7eb;padding-top:8px;font-size:11px;color:#9ca3af;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+        <span>Xin cảm ơn Quý phụ huynh.</span><span>${S(center)} · in ${D(SM.todayISO())}</span>
+      </div>
+    </div>`;
+  }
+
+  // Tải thư viện ảnh (html2canvas) khi cần — không ảnh hưởng tốc độ tải trang.
+  let _h2cP = null;
+  function ensureH2C() {
+    if (window.html2canvas) return Promise.resolve(window.html2canvas);
+    if (_h2cP) return _h2cP;
+    _h2cP = new Promise((res, rej) => {
+      const s = document.createElement("script");
+      s.src = "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
+      s.onload = () => res(window.html2canvas); s.onerror = () => { _h2cP = null; rej(new Error("Không tải được thư viện ảnh")); };
+      document.head.appendChild(s);
+    });
+    return _h2cP;
+  }
+  function invDownload(name, blob) {
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+  }
+  async function invExportPng(docHtml, filename) {
+    const h2c = await ensureH2C();
+    const box = document.createElement("div");
+    box.style.cssText = "position:fixed;left:-10000px;top:0;width:688px;background:#fff;";
+    box.innerHTML = docHtml;
+    document.body.appendChild(box);
+    try {
+      const canvas = await h2c(box.firstElementChild, { scale: 2, backgroundColor: "#ffffff" });
+      await new Promise(r => canvas.toBlob(b => { invDownload(filename, b); r(); }, "image/png"));
+    } finally { box.remove(); }
+  }
+  function invExportPdf(docHtml) {
+    let cont = document.getElementById("inv-print");
+    if (!cont) { cont = document.createElement("div"); cont.id = "inv-print"; document.body.appendChild(cont); }
+    cont.innerHTML = docHtml;
+    document.body.classList.add("printing-inv");
+    const done = () => { document.body.classList.remove("printing-inv"); cont.innerHTML = ""; window.removeEventListener("afterprint", done); };
+    window.addEventListener("afterprint", done);
+    setTimeout(() => window.print(), 60);
+    setTimeout(done, 60000);
+  }
+  const invFileBase = inv => "HoaDon_" +
+    ((inv.student ? inv.student.full_name : "hocvien") || "hocvien").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/gi, "d").replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "") +
+    "_" + inv.period_month + "-" + inv.period_year;
+
   async function invoiceDetail(id) {
     const ov = document.createElement("div"); ov.className = "sm-ov";
     ov.innerHTML = `<div class="sm-modal"><div class="mh"><h3>Hóa đơn</h3><button class="btn ghost" data-x="close">✕</button></div>
@@ -484,43 +615,37 @@ window.Tuition = (function () {
     const { data: lines } = await sb.from("invoice_lines").select("*").eq("invoice_id", id).order("created_at");
     const stt = ISTATUS[inv.status] || { l: inv.status, c: "mute" };
     const isDraft = inv.status === "draft";
-    const lessons = (lines || []).filter(l => l.kind === "lesson");
-    const others = (lines || []).filter(l => l.kind !== "lesson");
-    // gộp dòng bài học theo đơn giá cho gọn
-    const groups = {};
-    lessons.forEach(l => { const k = l.unit_amount; (groups[k] = groups[k] || { qty: 0, unit: l.unit_amount, amount: 0 }); groups[k].qty += Number(l.quantity); groups[k].amount += l.amount; });
-    const grpArr = Object.values(groups).sort((a, b) => b.unit - a.unit);
+    const cfg = await SM.refSettings().catch(() => null);
+    const center = (cfg && cfg.center_name) || "Trung tâm";
+    const docHtml = invoiceDocHtml(inv, lines || [], center);
 
     ov.querySelector(".sm-modal").innerHTML = `
-      <div class="mh"><h3>Hóa đơn · ${SM.esc(inv.student ? inv.student.full_name : "")}</h3><button class="btn ghost" data-x="close">✕</button></div>
+      <div class="mh"><h3>Hóa đơn · ${SM.esc(inv.student ? inv.student.full_name : "")} · <span class="badge ${stt.c}">${stt.l}</span></h3><button class="btn ghost" data-x="close">✕</button></div>
       <div class="mb">
-        <p style="margin:.1rem 0 .3rem;">${SM.esc(inv.klass ? inv.klass.name : cName(inv.class_id))} · Kỳ <b>${MONTHS[inv.period_month - 1]}/${inv.period_year}</b>
-          ${inv.bill_from && inv.bill_to ? `· <span class="muted">buổi ${SM.dmy(inv.bill_from)}–${SM.dmy(inv.bill_to)}</span>` : ""}
-          · <span class="badge ${stt.c}">${stt.l}</span>${inv.finalized_at ? ` · chốt ngày ${SM.dmy(inv.finalized_at)}` : ""}${inv.due_date ? ` · hạn ${SM.dmy(inv.due_date)}` : ""}</p>
-        ${!lessons.length && !others.length ? `<p class="muted">Không có khoản phí nào phát sinh trong kỳ này.</p>`
-          : `<table class="inv-lines">
-              ${grpArr.map(g => `<tr><td>${g.qty} buổi tính phí × ${SM.vnd(g.unit)}</td><td class="r">${SM.vnd(g.amount)}</td></tr>`).join("")}
-              ${others.map(o => `<tr><td>${SM.esc(o.description)}</td><td class="r">${o.amount < 0 ? "−" : ""}${SM.vnd(Math.abs(o.amount))}</td></tr>`).join("")}
-              <tr class="sub"><td>Tạm tính</td><td class="r">${SM.vnd(inv.subtotal)}</td></tr>
-              ${inv.discount_total ? `<tr><td>Tổng giảm</td><td class="r">−${SM.vnd(inv.discount_total)}</td></tr>` : ""}
-              ${inv.adjustment_total ? `<tr><td>Điều chỉnh</td><td class="r">${SM.vnd(inv.adjustment_total)}</td></tr>` : ""}
-              <tr class="tot"><td>Phải thanh toán</td><td class="r">${SM.vnd(inv.total)}</td></tr>
-            </table>`}
-        ${lessons.length ? `<details style="margin-top:.7rem;"><summary class="muted" style="cursor:pointer;font-size:.85rem;">Chi tiết từng buổi (${lessons.length})</summary>
-          <table class="inv-lines" style="margin-top:.4rem;">${lessons.map(l => `<tr><td>${SM.esc(l.description)}</td><td class="r">${SM.vnd(l.amount)}</td></tr>`).join("")}</table></details>` : ""}
+        <div class="inv-doc-wrap">${docHtml}</div>
         ${isDraft ? `<p class="muted" style="font-size:.83rem;margin:.7rem 0 0;">Đây là bản <b>nháp</b> — có thể tính lại hoặc xóa. Chốt xong sẽ khóa, chỉ sửa được bằng điều chỉnh (GĐ7).</p>`
           : `<p class="muted" style="font-size:.83rem;margin:.7rem 0 0;">Hóa đơn đã chốt — bất biến. Mọi thay đổi phải qua bút toán điều chỉnh (GĐ7).</p>`}
       </div>
       <div class="mf">
         ${isDraft ? `<button class="btn ghost" data-x="del" style="color:var(--danger);border-color:var(--danger);margin-right:auto;">🗑 Xóa nháp</button>
-          <button class="btn ghost" data-x="rebuild">↻ Tính lại</button>
-          <button class="btn" data-x="finalize">🔒 Chốt hóa đơn</button>`
+          <button class="btn ghost" data-x="rebuild">↻ Tính lại</button>` : ""}
+        <button class="btn ghost" data-x="pdf">🖨 PDF</button>
+        <button class="btn ghost" data-x="png">🖼 Ảnh PNG</button>
+        ${isDraft ? `<button class="btn" data-x="finalize">🔒 Chốt hóa đơn</button>`
           : `<button class="btn ghost" data-x="close">Đóng</button>`}
         <span class="msg" id="iv-msg" style="align-self:center"></span>
       </div>`;
 
     const modal = ov.querySelector(".sm-modal");
     modal.querySelector('[data-x="close"]').onclick = () => ov.remove();
+    modal.querySelector('[data-x="pdf"]').onclick = () => invExportPdf(docHtml);
+    const pngBtn = modal.querySelector('[data-x="png"]');
+    pngBtn.onclick = async () => {
+      pngBtn.disabled = true; const t0 = pngBtn.textContent; pngBtn.textContent = "Đang tạo ảnh…";
+      try { await invExportPng(docHtml, invFileBase(inv) + ".png"); SM.toast("🖼 Đã tải ảnh hóa đơn", "ok"); }
+      catch (e) { say("Lỗi tạo ảnh: " + (e.message || e), true); }
+      finally { pngBtn.disabled = false; pngBtn.textContent = t0; }
+    };
     const say = (t, e) => { const m = ov.querySelector("#iv-msg"); m.textContent = t; m.className = "msg" + (e ? " err" : ""); };
     const del = modal.querySelector('[data-x="del"]');
     if (del) del.onclick = async () => {

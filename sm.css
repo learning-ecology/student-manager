@@ -262,6 +262,18 @@ body.printing .receipt-print{position:fixed;left:0;top:0;width:100%;padding:2rem
 .slot-row .slot-lbl{font-weight:700;min-width:34px;color:var(--accent);}
 .slot-row input[type=time]{width:auto;}
 
+/* ---- chọn học viên trong form lớp ---- */
+.stu-results{max-height:220px;overflow:auto;border:1px solid var(--line);border-radius:10px;background:var(--card);margin-bottom:.4rem;}
+.stu-results .res-row{display:flex;align-items:center;gap:.5rem;padding:.42rem .6rem;border-bottom:1px solid var(--line);cursor:pointer;}
+.stu-results .res-row:last-child{border-bottom:0;}
+.stu-results .res-row:hover{background:var(--accent-soft);}
+.stu-chips{display:flex;flex-wrap:wrap;gap:.4rem;}
+.stu-chip{display:inline-flex;align-items:center;gap:.35rem;background:var(--accent-soft);border:1px solid var(--line);
+  border-radius:999px;padding:.24rem .3rem .24rem .7rem;font-size:.88rem;}
+.stu-chip .rm{border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:1rem;line-height:1;padding:0 .25rem;border-radius:50%;}
+.stu-chip .rm:hover{color:var(--danger);}
+.stu-chip.new{background:var(--good-bg,#eafaf0);border-color:#bfe6cd;}
+
 /* ---- hóa đơn phụ huynh: xem trước + xuất PDF/PNG ---- */
 .inv-doc-wrap{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.06);}
 .inv-doc-wrap .inv-doc{color:#1f2937;}

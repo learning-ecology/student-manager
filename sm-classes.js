@@ -160,6 +160,17 @@ window.Classes = (function () {
             ? "Hiệu lực từ ngày bắt đầu lớp (mặc định hôm nay). Sau khi tạo, vào 🗓️ Lịch học bấm <b>⚡ Sinh buổi học</b> để tạo các buổi."
             : "Thêm/bớt/đổi giờ sẽ đồng bộ với 🗓️ Lịch học. Buổi đã tạo trước đó <b>giữ nguyên</b>; ngày mới áp dụng từ hôm nay trở đi (bấm ⚡ Sinh buổi học để tạo)."}</p>
         </div>
+        <div class="field" style="grid-column:1/-1;border-top:1px solid var(--line);padding-top:.7rem;">
+          <label style="font-weight:600;">👥 Học viên <span class="muted" style="font-weight:400">— tùy chọn</span></label>
+          <div style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;margin:.45rem 0 .3rem;">
+            <input id="c-stuq" placeholder="Tìm học viên có sẵn: tên / mã / SĐT…" style="flex:1;min-width:200px;" autocomplete="off">
+            <button type="button" class="btn ghost" id="c-newstu">➕ Tạo học viên mới</button>
+          </div>
+          <div id="c-stuResults" class="stu-results" style="display:none;"></div>
+          <div id="c-stuChips" class="stu-chips"></div>
+          <p class="muted" id="c-stuHint" style="font-size:.82rem;margin:.35rem 0 0;"></p>
+          ${isNew ? "" : `<p class="muted" style="font-size:.8rem;margin:.2rem 0 0;">Bỏ chọn học viên đang học sẽ chuyển em đó sang "Đã rời lớp" (giữ nguyên lịch sử điểm danh & học phí).</p>`}
+        </div>
       </div></div>
       <div class="mf"><button class="btn ghost" data-x="close">Hủy</button><button class="btn" id="c-save">💾 Lưu</button>
         <span class="msg" id="c-msg" style="align-self:center"></span></div></div>`;
@@ -178,7 +189,119 @@ window.Classes = (function () {
       SM.invalidate("teachers"); SM.toast("✓ Đã thêm giáo viên", "ok");
     };
     wireSchedule(ov, c);
+    wireStudents(ov, c);
     ov.querySelector("#c-save").addEventListener("click", () => saveClass(ov, c));
+  }
+
+  // Mục "Học viên" trong form lớp — tìm & chọn học viên có sẵn, tạo học viên mới.
+  // Lưu danh sách chọn vào ov._stuPicked; ov._stuLoad báo khi nạp xong (chống lưu sớm).
+  function wireStudents(ov, c) {
+    const qEl = ov.querySelector("#c-stuq"); if (!qEl) return;
+    const resEl = ov.querySelector("#c-stuResults"), chipsEl = ov.querySelector("#c-stuChips"), hintEl = ov.querySelector("#c-stuHint");
+    const picked = new Map();                    // student_id -> {id, code, full_name, phone, isNew}
+    ov._stuPicked = picked;
+    let resolveLoad; ov._stuLoad = new Promise(r => resolveLoad = r);
+    const capOf = () => { const m = ov.querySelector("#c-max").value.trim(); return m === "" ? null : Math.max(1, parseInt(m, 10) || 1); };
+    const renderChips = () => {
+      chipsEl.innerHTML = [...picked.values()].map(s => `<span class="stu-chip${s.isNew ? " new" : ""}">
+        <b>${SM.esc(s.full_name)}</b><span class="muted">${s.code ? " · " + SM.esc(s.code) : s.isNew ? " · mới" : ""}</span>
+        <button type="button" class="rm" data-rm="${s.id}" title="Bỏ chọn">✕</button></span>`).join("");
+      chipsEl.querySelectorAll("[data-rm]").forEach(b => b.addEventListener("click", () => { picked.delete(b.dataset.rm); renderChips(); }));
+      const cap = capOf(), n = picked.size;
+      if (cap != null && n > cap) hintEl.innerHTML = `<span style="color:var(--danger)">⚠ Đã chọn ${n} — vượt sĩ số tối đa ${cap}. Bỏ bớt trước khi lưu.</span>`;
+      else hintEl.textContent = n ? `Đã chọn ${n} học viên${cap != null ? " · tối đa " + cap : ""}.` : "";
+    };
+    const add = s => { if (s && !picked.has(s.id)) picked.set(s.id, s); renderChips(); };
+    let deb;
+    const search = async () => {
+      const q = qEl.value.trim();
+      if (!q) { resEl.style.display = "none"; resEl.innerHTML = ""; return; }
+      const { data } = await sb.from("students").select("id, code, full_name, phone").is("archived_at", null)
+        .or(`full_name.ilike.%${q.replace(/[%,]/g, " ")}%,code.ilike.%${q}%,phone.ilike.%${q}%`).limit(30);
+      const rows = (data || []).filter(s => !picked.has(s.id));
+      resEl.style.display = "block";
+      resEl.innerHTML = rows.length ? rows.map(s => `<div class="res-row" data-add="${s.id}">
+        <span>➕</span><span><b>${SM.esc(s.full_name)}</b> <span class="muted">· ${SM.esc(s.code || "")}${s.phone ? " · " + SM.esc(s.phone) : ""}</span></span></div>`).join("")
+        : `<p class="muted" style="padding:.6rem">Không tìm thấy (học viên đã chọn được ẩn).</p>`;
+      resEl.querySelectorAll("[data-add]").forEach(r => r.addEventListener("click", () => {
+        add(rows.find(x => x.id === r.dataset.add));
+        qEl.value = ""; resEl.style.display = "none"; resEl.innerHTML = ""; qEl.focus();
+      }));
+    };
+    qEl.addEventListener("input", () => { clearTimeout(deb); deb = setTimeout(search, 250); });
+    ov.querySelector("#c-newstu").addEventListener("click", () => newStudentModal(s => add({ id: s.id, code: s.code, full_name: s.full_name, phone: s.phone, isNew: true })));
+    ov.querySelector("#c-max").addEventListener("input", renderChips);
+    // sửa lớp → nạp học viên đang học
+    (async () => {
+      if (c && c.id) {
+        const { data } = await sb.from("enrollments").select("student:students(id,code,full_name,phone)")
+          .eq("class_id", c.id).eq("status", "active");
+        (data || []).forEach(e => e.student && picked.set(e.student.id, e.student));
+      }
+      renderChips(); resolveLoad();
+    })();
+  }
+
+  // Modal tạo nhanh học viên (dùng đúng bảng students — không tạo kho dữ liệu riêng).
+  function newStudentModal(onCreated) {
+    const GEN = { male: "Nam", female: "Nữ", other: "Khác" };
+    const ov = document.createElement("div"); ov.className = "sm-ov"; ov.style.zIndex = "140";
+    ov.innerHTML = `<div class="sm-modal" style="max-width:520px;"><div class="mh"><h3>➕ Tạo học viên mới</h3><button class="btn ghost" data-x="close">✕</button></div>
+      <div class="mb"><div class="grid2">
+        <div class="field" style="grid-column:1/-1"><label>Họ và tên *</label><input id="ns-name"></div>
+        <div class="field"><label>Ngày sinh (DD/MM/YYYY)</label><input id="ns-dob" placeholder="01/09/2010"></div>
+        <div class="field"><label>Giới tính</label><select id="ns-gender"><option value="">—</option>${Object.entries(GEN).map(([k, v]) => `<option value="${k}">${v}</option>`).join("")}</select></div>
+        <div class="field"><label>SĐT học viên</label><input id="ns-phone"></div>
+        <div class="field"><label>Email</label><input id="ns-email"></div>
+        <div class="field"><label>Tên phụ huynh</label><input id="ns-gname"></div>
+        <div class="field"><label>SĐT phụ huynh</label><input id="ns-gphone"></div>
+        <div class="field" style="grid-column:1/-1"><label>Ghi chú</label><textarea id="ns-notes" style="min-height:48px"></textarea></div>
+      </div><p class="muted" style="font-size:.82rem">Mã học viên tự sinh khi lưu. Học viên sẽ được chọn vào lớp.</p></div>
+      <div class="mf"><button class="btn ghost" data-x="close">Hủy</button><button class="btn" id="ns-save">💾 Tạo &amp; chọn</button>
+        <span class="msg" id="ns-msg" style="align-self:center"></span></div></div>`;
+    document.body.appendChild(ov);
+    ov.addEventListener("click", e => { if (e.target === ov || e.target.dataset.x === "close") ov.remove(); });
+    const V = id => ov.querySelector("#" + id).value;
+    const say = (t, e) => { const m = ov.querySelector("#ns-msg"); m.textContent = t; m.className = "msg" + (e ? " err" : ""); };
+    ov.querySelector("#ns-save").addEventListener("click", async () => {
+      const name = V("ns-name").trim(); if (!name) return say("Thiếu họ tên.", true);
+      const dobRaw = V("ns-dob").trim(); const dob = dobRaw ? SM.parseDmy(dobRaw) : null;
+      if (dobRaw && !dob) return say("Ngày sinh không hợp lệ (DD/MM/YYYY).", true);
+      const email = V("ns-email").trim();
+      if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return say("Email không hợp lệ.", true);
+      const row = { full_name: name, dob, gender: V("ns-gender") || null, phone: V("ns-phone").trim(), email,
+        guardian_name: V("ns-gname").trim(), guardian_phone: V("ns-gphone").trim(),
+        enrolled_on: SM.todayISO(), status: "active", notes: V("ns-notes").trim() };
+      const btn = ov.querySelector("#ns-save"); btn.disabled = true;
+      const { data, error } = await sb.from("students").insert(row).select("id, code, full_name, phone").single();
+      if (error) { btn.disabled = false; return say("Không tạo được: " + error.message, true); }
+      SM.toast("✓ Đã tạo học viên " + data.full_name, "ok");
+      onCreated(data); ov.remove();
+    });
+    ov.querySelector("#ns-name").focus();
+  }
+
+  // Ghi danh: lớp mới → thêm tất cả; sửa lớp → thêm em mới, gỡ (chuyển 'former') em bỏ chọn.
+  async function applyEnrollments(classId, isNew, picked) {
+    const wantIds = new Set(picked.keys());
+    if (isNew) {
+      if (!wantIds.size) return { error: null, added: 0, removed: 0 };
+      const rows = [...wantIds].map(sid => ({ student_id: sid, class_id: classId, joined_on: SM.todayISO(), status: "active" }));
+      const { error } = await sb.from("enrollments").insert(rows);
+      return { error, added: rows.length, removed: 0 };
+    }
+    const { data, error: le } = await sb.from("enrollments").select("id, student_id").eq("class_id", classId).eq("status", "active");
+    if (le) return { error: le };
+    const curMap = new Map((data || []).map(e => [e.student_id, e.id]));
+    const toAdd = [...wantIds].filter(sid => !curMap.has(sid));
+    const toRemove = [...curMap.entries()].filter(([sid]) => !wantIds.has(sid)).map(([, id]) => id);
+    if (toAdd.length) {
+      const { error } = await sb.from("enrollments").insert(toAdd.map(sid => ({ student_id: sid, class_id: classId, joined_on: SM.todayISO(), status: "active" })));
+      if (error) return { error };
+    }
+    const today = SM.todayISO();
+    for (const id of toRemove) { const { error } = await sb.from("enrollments").update({ status: "former", left_on: today }).eq("id", id); if (error) return { error }; }
+    return { error: null, added: toAdd.length, removed: toRemove.length };
   }
 
   // Bảng chọn "Lịch học cố định" — chọn thứ + giờ, áp giờ chung.
@@ -256,6 +379,11 @@ window.Classes = (function () {
       if (!t1 || !t2 || t2 <= t1) return say(`Lịch ${(SCHED_DAYS.find(d => d.dow === dow) || {}).lbl}: giờ kết thúc phải sau giờ bắt đầu.`, true);
       slots.push({ weekday: dow, start_time: t1, end_time: t2 });
     }
+    // Học viên đã chọn — chờ nạp xong & kiểm tra sĩ số tối đa trước khi lưu.
+    if (ov._stuLoad) await ov._stuLoad;
+    const picked = ov._stuPicked;
+    if (picked && row.max_students != null && picked.size > row.max_students)
+      return say(`Đã chọn ${picked.size} học viên, vượt sĩ số tối đa ${row.max_students}. Bỏ bớt trước khi lưu.`, true);
 
     ov.querySelector("#c-save").disabled = true;
     let error, newId = c.id;
@@ -280,9 +408,17 @@ window.Classes = (function () {
       const res = await syncSchedules(c.id, slots, start, end);
       schedErr = res.error; if (!res.error && (res.added || res.removed || res.changed)) note = " · lịch tuần đã cập nhật";
     }
-    ov.querySelector("#c-save").disabled = false;
     if (schedErr) { ov.remove(); SM.toast((c.id ? "Đã lưu lớp" : "Đã tạo lớp") + "; lịch tuần lỗi: " + schedErr.message + " — chỉnh ở 🗓️ Lịch học.", "err"); SM.invalidate("classes"); loadClasses(); return; }
-    ov.remove(); SM.toast((c.id ? "✓ Đã lưu lớp" : "✓ Đã tạo lớp") + note, "ok"); SM.invalidate("classes"); loadClasses();
+
+    // Ghi danh học viên (lớp mới: thêm tất cả; sửa: đồng bộ thêm/gỡ). Dùng bảng enrollments.
+    let stuNote = "";
+    if (picked && (picked.size || c.id)) {
+      const er = await applyEnrollments(newId, !c.id, picked);
+      if (er.error) { ov.remove(); SM.toast((c.id ? "Đã lưu lớp" : "Đã tạo lớp") + note + "; lỗi ghi danh: " + er.error.message, "err"); SM.invalidate("classes"); loadClasses(); return; }
+      const parts = []; if (er.added) parts.push("+" + er.added + " học viên"); if (er.removed) parts.push("−" + er.removed + " rời lớp");
+      if (parts.length) stuNote = " · " + parts.join(", ");
+    }
+    ov.remove(); SM.toast((c.id ? "✓ Đã lưu lớp" : "✓ Đã tạo lớp") + note + stuNote, "ok"); SM.invalidate("classes"); loadClasses();
   }
 
   // Khớp class_schedules của lớp với danh sách thứ đã chọn: cập nhật giờ (giữ id),

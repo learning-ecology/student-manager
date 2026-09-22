@@ -418,7 +418,20 @@ window.Classes = (function () {
       const parts = []; if (er.added) parts.push("+" + er.added + " học viên"); if (er.removed) parts.push("−" + er.removed + " rời lớp");
       if (parts.length) stuNote = " · " + parts.join(", ");
     }
-    ov.remove(); SM.toast((c.id ? "✓ Đã lưu lớp" : "✓ Đã tạo lớp") + note + stuNote, "ok"); SM.invalidate("classes"); loadClasses();
+
+    // Tự động sinh buổi học cho lớp MỚI có lịch tuần — dùng lại đúng RPC của nút ⚡ Sinh buổi học.
+    let genNote = "";
+    if (!c.id && slots.length && newId) {
+      const today = SM.todayISO();
+      const from = (start && start > today) ? start : today;
+      const iso = dt => dt.getFullYear() + "-" + String(dt.getMonth() + 1).padStart(2, "0") + "-" + String(dt.getDate()).padStart(2, "0");
+      const d = new Date(today.slice(0, 8) + "01T00:00:00"); d.setMonth(d.getMonth() + 2); d.setDate(0);   // hết tháng sau
+      const to = (end && end < iso(d)) ? end : iso(d);
+      const { data: gcount, error: ge } = await sb.rpc("generate_sessions", { p_class: newId, p_from: from, p_to: to });
+      if (ge) { ov.remove(); SM.toast("✓ Đã tạo lớp" + note + stuNote + "; chưa sinh buổi được: " + ge.message + " — vào 🗓️ Lịch học bấm ⚡ Sinh buổi học.", "err"); SM.invalidate("classes"); loadClasses(); return; }
+      if (gcount > 0) { genNote = ` và tự động sinh ${gcount} buổi học`; note = ""; }   // buổi sinh ra đã ngụ ý lịch tuần
+    }
+    ov.remove(); SM.toast((c.id ? "✓ Đã lưu lớp" : "✓ Đã tạo lớp") + genNote + note + stuNote, "ok"); SM.invalidate("classes"); loadClasses();
   }
 
   // Khớp class_schedules của lớp với danh sách thứ đã chọn: cập nhật giờ (giữ id),

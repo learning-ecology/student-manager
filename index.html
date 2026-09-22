@@ -6,7 +6,7 @@
   <title>Quản lý học viên</title>
   <link rel="preconnect" href="https://zrmgunriwvcjppjykngk.supabase.co" crossorigin>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-  <link rel="stylesheet" href="sm.css?v=26">
+  <link rel="stylesheet" href="sm.css?v=27">
   <script>try{if(localStorage.getItem("sm_theme")==="dark")document.documentElement.setAttribute("data-theme","dark");}catch(e){}</script>
 </head>
 <body>
@@ -48,19 +48,19 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=26"></script>
-  <script src="sm-lib.js?v=26"></script>
-  <script src="sm-students.js?v=26"></script>
-  <script src="sm-classes.js?v=26"></script>
-  <script src="sm-schedule.js?v=26"></script>
-  <script src="sm-attendance.js?v=26"></script>
-  <script src="sm-tuition.js?v=26"></script>
-  <script src="sm-payments.js?v=26"></script>
-  <script src="sm-dashboard.js?v=26"></script>
-  <script src="sm-reports.js?v=26"></script>
-  <script src="sm-audit.js?v=26"></script>
-  <script src="sm-tenants.js?v=26"></script>
-  <script src="sm-handbook.js?v=26"></script>
+  <script src="config.js?v=27"></script>
+  <script src="sm-lib.js?v=27"></script>
+  <script src="sm-students.js?v=27"></script>
+  <script src="sm-classes.js?v=27"></script>
+  <script src="sm-schedule.js?v=27"></script>
+  <script src="sm-attendance.js?v=27"></script>
+  <script src="sm-tuition.js?v=27"></script>
+  <script src="sm-payments.js?v=27"></script>
+  <script src="sm-dashboard.js?v=27"></script>
+  <script src="sm-reports.js?v=27"></script>
+  <script src="sm-audit.js?v=27"></script>
+  <script src="sm-tenants.js?v=27"></script>
+  <script src="sm-handbook.js?v=27"></script>
   <script>
     const $ = id => document.getElementById(id);
     let ME = null, SETTINGS = null;
@@ -182,6 +182,8 @@
       } catch (e) {}
       $("app").hidden = false;
       route();
+      // Bảo trì lịch: mỗi tháng tự sinh buổi cho lớp mở (không có ngày kết thúc). Chạy nền, không chặn UI.
+      try { Classes.ensureMonthlySessions(ME.profile.tenant_id); } catch (e) {}
     })();
   </script>
 </body>

@@ -421,16 +421,19 @@ window.Classes = (function () {
 
     // Tự động sinh buổi học khi lớp có lịch tuần (cả tạo & sửa) — dùng lại đúng RPC của nút ⚡ Sinh buổi học.
     // RPC an toàn: chỉ tạo buổi còn thiếu, không bao giờ sinh trùng hay sửa buổi đã có.
+    //  • Có ngày kết thúc → sinh HẾT tới ngày đó (không giới hạn số buổi).
+    //  • Không có ngày kết thúc → lớp mở, chỉ sinh hết THÁNG hiện tại (được bảo trì theo tháng ở startup).
     let genNote = "";
     if (slots.length && newId) {
       const today = SM.todayISO();
-      const from = (start && start > today) ? start : today;
-      const iso = dt => dt.getFullYear() + "-" + String(dt.getMonth() + 1).padStart(2, "0") + "-" + String(dt.getDate()).padStart(2, "0");
-      const d = new Date(today.slice(0, 8) + "01T00:00:00"); d.setMonth(d.getMonth() + 2); d.setDate(0);   // hết tháng sau
-      const to = (end && end < iso(d)) ? end : iso(d);
-      const { data: gcount, error: ge } = await sb.rpc("generate_sessions", { p_class: newId, p_from: from, p_to: to });
-      if (ge) { ov.remove(); SM.toast((c.id ? "✓ Đã lưu lớp" : "✓ Đã tạo lớp") + note + stuNote + "; chưa sinh buổi được: " + ge.message + " — vào 🗓️ Lịch học bấm ⚡ Sinh buổi học.", "err"); SM.invalidate("classes"); loadClasses(); return; }
-      if (gcount > 0) { genNote = ` và tự động sinh ${gcount} buổi học`; if (!c.id) note = ""; }   // buổi sinh ra đã ngụ ý lịch tuần
+      // Có ngày kết thúc → sinh từ ngày bắt đầu lớp tới hết ngày kết thúc. Không có → chỉ sinh tháng hiện tại.
+      const from = end ? (start || today) : (today.slice(0, 8) + "01");
+      const to = end || monthEndISO(today);
+      if (to >= from) {
+        const { count, error: ge } = await generateSessionsRange(newId, from, to);
+        if (ge) { ov.remove(); SM.toast((c.id ? "✓ Đã lưu lớp" : "✓ Đã tạo lớp") + note + stuNote + "; chưa sinh buổi được: " + ge.message + " — vào 🗓️ Lịch học bấm ⚡ Sinh buổi học.", "err"); SM.invalidate("classes"); loadClasses(); return; }
+        if (count > 0) { genNote = ` và tự động sinh ${count} buổi học`; if (!c.id) note = ""; }   // buổi sinh ra đã ngụ ý lịch tuần
+      }
     }
     ov.remove(); SM.toast((c.id ? "✓ Đã lưu lớp" : "✓ Đã tạo lớp") + genNote + note + stuNote, "ok"); SM.invalidate("classes"); loadClasses();
   }
@@ -676,7 +679,45 @@ window.Classes = (function () {
     }
   }
 
+  /* ---------------- SINH BUỔI TỰ ĐỘNG (dùng lại RPC generate_sessions) ---------------- */
+  const isoLocal = dt => dt.getFullYear() + "-" + String(dt.getMonth() + 1).padStart(2, "0") + "-" + String(dt.getDate()).padStart(2, "0");
+  const addDaysISO = (s, n) => { const d = new Date(s + "T00:00:00"); d.setDate(d.getDate() + n); return isoLocal(d); };
+  const monthEndISO = s => { const d = new Date(s.slice(0, 8) + "01T00:00:00"); d.setMonth(d.getMonth() + 1); d.setDate(0); return isoLocal(d); };
+
+  // Sinh buổi cho khoảng [from,to] bất kỳ, tự chia nhỏ ≤366 ngày (giới hạn của RPC). Trả tổng số buổi mới.
+  async function generateSessionsRange(classId, from, to) {
+    let total = 0, cur = from;
+    while (cur <= to) {
+      let winEnd = addDaysISO(cur, 365); if (winEnd > to) winEnd = to;
+      const { data, error } = await sb.rpc("generate_sessions", { p_class: classId, p_from: cur, p_to: winEnd });
+      if (error) return { error };
+      total += (data || 0);
+      cur = addDaysISO(winEnd, 1);
+    }
+    return { count: total };
+  }
+
+  // Bảo trì hằng tháng cho lớp MỞ (không có ngày kết thúc): mỗi tháng tự sinh buổi của tháng đó.
+  // Chạy 1 lần/tháng/trình duyệt (gác bằng localStorage). An toàn & idempotent nhờ RPC.
+  async function ensureMonthlySessions(tenantKey) {
+    const today = SM.todayISO(), ym = today.slice(0, 7);
+    const key = "sm_gen_month" + (tenantKey ? "_" + tenantKey : "");
+    try { if (localStorage.getItem(key) === ym) return; } catch (e) {}
+    try {
+      const [{ data: scheds }, { data: cs }] = await Promise.all([
+        sb.from("class_schedules").select("class_id"),
+        sb.from("classes").select("id,end_date,status").is("archived_at", null).neq("status", "completed").is("end_date", null)
+      ]);
+      const withSched = new Set((scheds || []).map(s => s.class_id));
+      const targets = (cs || []).filter(c => withSched.has(c.id));
+      const mStart = today.slice(0, 8) + "01", mEnd = monthEndISO(today);
+      for (const c of targets) { await generateSessionsRange(c.id, mStart, mEnd); }   // RPC tự bỏ qua ngày lễ & tôn trọng ngày bắt đầu lớp
+      try { localStorage.setItem(key, ym); } catch (e) {}
+    } catch (e) { /* im lặng — không chặn UI */ }
+  }
+
   return {
+    ensureMonthlySessions,
     async render(el, me) {
       ME = me; box = el; view = "list"; sel.clear();
       box.innerHTML = `<div class="card placeholder"><span class="spinner"></span></div>`;

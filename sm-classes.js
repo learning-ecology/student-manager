@@ -157,7 +157,7 @@ window.Classes = (function () {
           </div>
           <div class="sched-slots" id="c-slots"></div>
           <p class="muted" style="font-size:.82rem;margin:.4rem 0 0;">${isNew
-            ? "Hiệu lực từ ngày bắt đầu lớp (mặc định hôm nay). Sau khi tạo, vào 🗓️ Lịch học bấm <b>⚡ Sinh buổi học</b> để tạo các buổi."
+            ? "Khi lưu sẽ <b>tự động sinh buổi học</b> theo lịch tuần (tự bỏ qua ngày lễ). Có ngày kết thúc → sinh đủ tới ngày đó; để trống → lớp mở, tự sinh cuốn chiếu theo tháng."
             : "Thêm/bớt/đổi giờ sẽ đồng bộ với 🗓️ Lịch học và <b>tự động sinh các buổi còn thiếu</b> khi lưu. Buổi đã tạo trước đó <b>giữ nguyên</b>; ngày mới áp dụng từ hôm nay trở đi."}</p>
         </div>
         <div class="field" style="grid-column:1/-1;border-top:1px solid var(--line);padding-top:.7rem;">
@@ -188,7 +188,7 @@ window.Classes = (function () {
       selEl.value = data.id;
       SM.invalidate("teachers"); SM.toast("✓ Đã thêm giáo viên", "ok");
     };
-    wireSchedule(ov, c);
+    ov._schedLoad = wireSchedule(ov, c);   // promise nạp lịch tuần hiện có (chống lưu sớm)
     wireStudents(ov, c);
     ov.querySelector("#c-save").addEventListener("click", () => saveClass(ov, c));
   }
@@ -371,7 +371,8 @@ window.Classes = (function () {
       billing_start: billStart, billing_include_future: ov.querySelector("#c-billfuture").checked,
       notes: V("c-notes").trim(), updated_at: new Date().toISOString()
     };
-    // Lịch học cố định — thu thập & kiểm tra trước khi lưu (dùng cho cả tạo & sửa).
+    // Lịch học cố định — CHỜ nạp xong lịch hiện có rồi mới đọc (chống xóa nhầm khi lưu sớm).
+    if (ov._schedLoad) await ov._schedLoad;
     const slots = [];
     const slotsEl = ov.querySelector("#c-slots");
     if (slotsEl) for (const r of slotsEl.querySelectorAll(".slot-row")) {
@@ -425,10 +426,7 @@ window.Classes = (function () {
     //  • Không có ngày kết thúc → lớp mở, chỉ sinh hết THÁNG hiện tại (được bảo trì theo tháng ở startup).
     let genNote = "";
     if (slots.length && newId) {
-      const today = SM.todayISO();
-      // Có ngày kết thúc → sinh từ ngày bắt đầu lớp tới hết ngày kết thúc. Không có → chỉ sinh tháng hiện tại.
-      const from = end ? (start || today) : (today.slice(0, 8) + "01");
-      const to = end || monthEndISO(today);
+      const { from, to } = genRange(start, end, SM.todayISO());
       if (to >= from) {
         const { count, error: ge } = await generateSessionsRange(newId, from, to);
         if (ge) { ov.remove(); SM.toast((c.id ? "✓ Đã lưu lớp" : "✓ Đã tạo lớp") + note + stuNote + "; chưa sinh buổi được: " + ge.message + " — vào 🗓️ Lịch học bấm ⚡ Sinh buổi học.", "err"); SM.invalidate("classes"); loadClasses(); return; }
@@ -682,7 +680,17 @@ window.Classes = (function () {
   /* ---------------- SINH BUỔI TỰ ĐỘNG (dùng lại RPC generate_sessions) ---------------- */
   const isoLocal = dt => dt.getFullYear() + "-" + String(dt.getMonth() + 1).padStart(2, "0") + "-" + String(dt.getDate()).padStart(2, "0");
   const addDaysISO = (s, n) => { const d = new Date(s + "T00:00:00"); d.setDate(d.getDate() + n); return isoLocal(d); };
-  const monthEndISO = s => { const d = new Date(s.slice(0, 8) + "01T00:00:00"); d.setMonth(d.getMonth() + 1); d.setDate(0); return isoLocal(d); };
+  const monthStartISO = s => s.slice(0, 8) + "01";
+  // hết tháng SAU (chân trời cho lớp mở): tháng hiện tại + 2 rồi lùi 1 ngày = cuối tháng kế tiếp
+  const horizonISO = s => { const d = new Date(monthStartISO(s) + "T00:00:00"); d.setMonth(d.getMonth() + 2); d.setDate(0); return isoLocal(d); };
+
+  // Khoảng sinh buổi theo quy tắc chung (dùng cho cả lưu lớp lẫn đồng bộ nền):
+  //  • Có ngày kết thúc → từ ngày bắt đầu lớp tới hết ngày kết thúc (sinh đủ, không giới hạn số buổi).
+  //  • Không có ngày kết thúc → lớp mở: từ đầu tháng hiện tại tới hết tháng kế tiếp (cuốn chiếu theo tháng).
+  function genRange(startISO, endISO, today) {
+    if (endISO) return { from: startISO || today, to: endISO };
+    return { from: monthStartISO(today), to: horizonISO(today) };
+  }
 
   // Sinh buổi cho khoảng [from,to] bất kỳ, tự chia nhỏ ≤366 ngày (giới hạn của RPC). Trả tổng số buổi mới.
   async function generateSessionsRange(classId, from, to) {
@@ -697,21 +705,25 @@ window.Classes = (function () {
     return { count: total };
   }
 
-  // Bảo trì hằng tháng cho lớp MỞ (không có ngày kết thúc): mỗi tháng tự sinh buổi của tháng đó.
-  // Chạy 1 lần/tháng/trình duyệt (gác bằng localStorage). An toàn & idempotent nhờ RPC.
+  // Đồng bộ nền cho MỌI lớp đang hoạt động có lịch tuần: sinh các buổi còn thiếu theo quy tắc chung.
+  //  - Lớp có ngày kết thúc → sinh đủ tới ngày đó. Lớp mở → cuốn chiếu tới hết tháng sau.
+  //  - Chạy 1 lần/tháng/trình duyệt (gác localStorage) → cũng là "migration" tự động cho lớp cũ.
+  //  - An toàn tuyệt đối: RPC idempotent, bỏ qua ngày lễ, tôn trọng ngày bắt đầu/kết thúc, không sửa buổi đã có.
   async function ensureMonthlySessions(tenantKey) {
     const today = SM.todayISO(), ym = today.slice(0, 7);
-    const key = "sm_gen_month" + (tenantKey ? "_" + tenantKey : "");
+    const key = "sm_gen_sync_v2" + (tenantKey ? "_" + tenantKey : "");   // key mới → chạy lại sau khi cập nhật logic
     try { if (localStorage.getItem(key) === ym) return; } catch (e) {}
     try {
       const [{ data: scheds }, { data: cs }] = await Promise.all([
         sb.from("class_schedules").select("class_id"),
-        sb.from("classes").select("id,end_date,status").is("archived_at", null).neq("status", "completed").is("end_date", null)
+        sb.from("classes").select("id,start_date,end_date,status").is("archived_at", null).neq("status", "completed")
       ]);
       const withSched = new Set((scheds || []).map(s => s.class_id));
       const targets = (cs || []).filter(c => withSched.has(c.id));
-      const mStart = today.slice(0, 8) + "01", mEnd = monthEndISO(today);
-      for (const c of targets) { await generateSessionsRange(c.id, mStart, mEnd); }   // RPC tự bỏ qua ngày lễ & tôn trọng ngày bắt đầu lớp
+      for (const c of targets) {
+        const { from, to } = genRange(c.start_date, c.end_date, today);
+        if (to >= from) await generateSessionsRange(c.id, from, to);   // RPC bỏ qua ngày lễ & tôn trọng ngày lớp
+      }
       try { localStorage.setItem(key, ym); } catch (e) {}
     } catch (e) { /* im lặng — không chặn UI */ }
   }

@@ -249,6 +249,19 @@ body.printing .receipt-print{position:fixed;left:0;top:0;width:100%;padding:2rem
   body.printing .sm-ov{position:static;background:none;padding:0;}
 }
 
+/* ---- lịch học cố định trong form thêm lớp ---- */
+.sched-days{display:flex;flex-wrap:wrap;gap:.4rem;margin:.5rem 0 .3rem;}
+.day-chip{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:999px;
+  padding:.34rem .8rem;font-weight:600;font-size:.9rem;cursor:pointer;min-width:46px;transition:all .12s;}
+.day-chip:hover{border-color:var(--accent);}
+.day-chip.on{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:0 1px 4px rgba(0,0,0,.12);}
+.sched-applyall{display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;margin:.3rem 0;}
+.sched-slots{display:flex;flex-direction:column;gap:.35rem;margin-top:.3rem;}
+.slot-row{display:flex;align-items:center;gap:.5rem;background:var(--paper);border:1px solid var(--line);
+  border-radius:10px;padding:.3rem .5rem;}
+.slot-row .slot-lbl{font-weight:700;min-width:34px;color:var(--accent);}
+.slot-row input[type=time]{width:auto;}
+
 /* ---- hóa đơn phụ huynh: xem trước + xuất PDF/PNG ---- */
 .inv-doc-wrap{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.06);}
 .inv-doc-wrap .inv-doc{color:#1f2937;}

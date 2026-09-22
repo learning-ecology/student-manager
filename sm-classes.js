@@ -143,8 +143,8 @@ window.Classes = (function () {
         <div class="field"><label>Ngày bắt đầu tính phí (DD/MM/YYYY)</label><input id="c-billstart" value="${c.billing_start ? SM.dmy(c.billing_start) : ""}" placeholder="mặc định = đầu tháng"></div>
         <div class="field" style="grid-column:1/-1"><label style="display:flex;align-items:center;gap:.5rem;font-weight:600;"><input type="checkbox" id="c-billfuture" ${g("billing_include_future", true) ? "checked" : ""} style="width:auto"> Mặc định tính cả buổi tương lai khi tạo hóa đơn</label></div>
         <div class="field" style="grid-column:1/-1"><label>Ghi chú</label><textarea id="c-notes" style="min-height:56px">${SM.esc(g("notes"))}</textarea></div>
-        ${isNew ? `<div class="field" style="grid-column:1/-1;border-top:1px solid var(--line);padding-top:.7rem;margin-top:.2rem;">
-          <label style="font-weight:600;">🗓️ Lịch học cố định <span class="muted" style="font-weight:400">— tùy chọn, sẽ tạo lịch tuần luôn</span></label>
+        <div class="field" style="grid-column:1/-1;border-top:1px solid var(--line);padding-top:.7rem;margin-top:.2rem;">
+          <label style="font-weight:600;">🗓️ Lịch học cố định <span class="muted" style="font-weight:400">— tùy chọn, ${isNew ? "sẽ tạo lịch tuần luôn" : "đồng bộ với Lịch học"}</span></label>
           <div class="sched-days" id="c-days">
             ${SCHED_DAYS.map(d => `<button type="button" class="day-chip" data-dow="${d.dow}">${d.lbl}</button>`).join("")}
           </div>
@@ -156,9 +156,10 @@ window.Classes = (function () {
             <button type="button" class="btn ghost" id="c-applybtn" style="padding:.28rem .6rem;">Áp dụng cho ngày đã chọn</button>
           </div>
           <div class="sched-slots" id="c-slots"></div>
-          <p class="muted" style="font-size:.82rem;margin:.4rem 0 0;">Hiệu lực từ ngày bắt đầu lớp (mặc định hôm nay). Sau khi tạo, vào 🗓️ Lịch học bấm <b>⚡ Sinh buổi học</b> để tạo các buổi.</p>
-        </div>`
-        : `<p class="muted" style="grid-column:1/-1;font-size:.85rem">Lịch học hằng tuần: cấu hình ở mục 🗓️ Lịch học → thẻ "Lịch tuần &amp; sinh buổi".</p>`}
+          <p class="muted" style="font-size:.82rem;margin:.4rem 0 0;">${isNew
+            ? "Hiệu lực từ ngày bắt đầu lớp (mặc định hôm nay). Sau khi tạo, vào 🗓️ Lịch học bấm <b>⚡ Sinh buổi học</b> để tạo các buổi."
+            : "Thêm/bớt/đổi giờ sẽ đồng bộ với 🗓️ Lịch học. Buổi đã tạo trước đó <b>giữ nguyên</b>; ngày mới áp dụng từ hôm nay trở đi (bấm ⚡ Sinh buổi học để tạo)."}</p>
+        </div>
       </div></div>
       <div class="mf"><button class="btn ghost" data-x="close">Hủy</button><button class="btn" id="c-save">💾 Lưu</button>
         <span class="msg" id="c-msg" style="align-self:center"></span></div></div>`;
@@ -176,32 +177,35 @@ window.Classes = (function () {
       selEl.value = data.id;
       SM.invalidate("teachers"); SM.toast("✓ Đã thêm giáo viên", "ok");
     };
-    wireSchedule(ov);
+    wireSchedule(ov, c);
     ov.querySelector("#c-save").addEventListener("click", () => saveClass(ov, c));
   }
 
-  // Bảng chọn "Lịch học cố định" trong form thêm lớp — chọn thứ + giờ, áp giờ chung.
-  function wireSchedule(ov) {
+  // Bảng chọn "Lịch học cố định" — chọn thứ + giờ, áp giờ chung.
+  // Ở chế độ sửa: nạp sẵn các thứ đang có từ class_schedules (dùng lại dữ liệu Lịch học).
+  async function wireSchedule(ov, c) {
     const daysEl = ov.querySelector("#c-days");
-    if (!daysEl) return;                         // chỉ có ở lớp mới
+    if (!daysEl) return;
     const slotsEl = ov.querySelector("#c-slots");
     const applyAll = ov.querySelector("#c-applyall");
+    const hm = t => (t || "").slice(0, 5);
     const lblOf = dow => (SCHED_DAYS.find(d => d.dow === dow) || {}).lbl || "";
     const orderIdx = dow => SCHED_DAYS.findIndex(d => d.dow === dow);
     const refreshApply = () => { applyAll.style.display = slotsEl.querySelector(".slot-row") ? "flex" : "none"; };
-    const addSlot = dow => {
+    const addSlot = (dow, t1, t2) => {
       const row = document.createElement("div");
       row.className = "slot-row"; row.dataset.dow = dow;
       row.innerHTML = `<span class="slot-lbl">${lblOf(dow)}</span>
-        <input type="time" class="slot-start" value="18:00">
+        <input type="time" class="slot-start" value="${hm(t1) || "18:00"}">
         <span class="muted">–</span>
-        <input type="time" class="slot-end" value="19:30">`;
+        <input type="time" class="slot-end" value="${hm(t2) || "19:30"}">`;
       const rows = [...slotsEl.querySelectorAll(".slot-row")];
       const next = rows.find(r => orderIdx(+r.dataset.dow) > orderIdx(dow));
       slotsEl.insertBefore(row, next || null);
       refreshApply();
     };
     const removeSlot = dow => { const r = slotsEl.querySelector(`.slot-row[data-dow="${dow}"]`); if (r) r.remove(); refreshApply(); };
+    const setChip = (dow, on) => { const ch = daysEl.querySelector(`.day-chip[data-dow="${dow}"]`); if (ch) ch.classList.toggle("on", on); };
     daysEl.querySelectorAll(".day-chip").forEach(chip => chip.addEventListener("click", () => {
       const dow = +chip.dataset.dow;
       chip.classList.toggle("on");
@@ -211,6 +215,16 @@ window.Classes = (function () {
       const s = ov.querySelector("#c-allstart").value, e = ov.querySelector("#c-allend").value;
       slotsEl.querySelectorAll(".slot-row").forEach(r => { r.querySelector(".slot-start").value = s; r.querySelector(".slot-end").value = e; });
     });
+    // sửa lớp → nạp lịch tuần hiện có (mỗi thứ một dòng; nếu một thứ có nhiều dòng, lấy dòng đầu)
+    if (c && c.id) {
+      const { data } = await sb.from("class_schedules").select("weekday,start_time,end_time")
+        .eq("class_id", c.id).order("weekday").order("start_time");
+      const seen = new Set();
+      (data || []).forEach(s => {
+        if (seen.has(s.weekday)) return; seen.add(s.weekday);
+        setChip(s.weekday, true); addSlot(s.weekday, s.start_time, s.end_time);
+      });
+    }
   }
   async function saveClass(ov, c) {
     const V = id => ov.querySelector("#" + id).value;
@@ -234,7 +248,7 @@ window.Classes = (function () {
       billing_start: billStart, billing_include_future: ov.querySelector("#c-billfuture").checked,
       notes: V("c-notes").trim(), updated_at: new Date().toISOString()
     };
-    // Lịch học cố định (chỉ khi tạo lớp mới) — thu thập & kiểm tra trước khi lưu.
+    // Lịch học cố định — thu thập & kiểm tra trước khi lưu (dùng cho cả tạo & sửa).
     const slots = [];
     const slotsEl = ov.querySelector("#c-slots");
     if (slotsEl) for (const r of slotsEl.querySelectorAll(".slot-row")) {
@@ -251,16 +265,59 @@ window.Classes = (function () {
       error = res.error; if (res.data) newId = res.data.id;
     }
     if (error) { ov.querySelector("#c-save").disabled = false; return say("Không lưu được: " + error.message, true); }
-    // tạo lịch tuần dùng chính cấu trúc của "Thêm lịch tuần" (class_schedules)
+
+    // Đồng bộ lịch tuần (class_schedules) — dùng lại đúng cấu trúc của "Thêm lịch tuần".
+    let schedErr = null, note = "";
     if (!c.id && slots.length && newId) {
+      // Lớp mới → thêm tất cả.
       const effFrom = start || SM.todayISO(), effTo = end || null;
-      const schedRows = slots.map(s => ({ class_id: newId, weekday: s.weekday, start_time: s.start_time, end_time: s.end_time,
+      const rows = slots.map(s => ({ class_id: newId, weekday: s.weekday, start_time: s.start_time, end_time: s.end_time,
         teacher_id: null, room: "", effective_from: effFrom, effective_to: effTo }));
-      const { error: se } = await sb.from("class_schedules").insert(schedRows);
-      if (se) { ov.remove(); SM.toast("Đã tạo lớp; lịch tuần lỗi: " + se.message + " — thêm lại ở 🗓️ Lịch học.", "err"); SM.invalidate("classes"); loadClasses(); return; }
+      const { error: se } = await sb.from("class_schedules").insert(rows);
+      schedErr = se; if (!se) note = ` + ${slots.length} lịch tuần`;
+    } else if (c.id && slotsEl) {
+      // Sửa lớp → cập nhật/​thêm/​xóa để khớp lựa chọn, KHÔNG đụng buổi đã sinh.
+      const res = await syncSchedules(c.id, slots, start, end);
+      schedErr = res.error; if (!res.error && (res.added || res.removed || res.changed)) note = " · lịch tuần đã cập nhật";
     }
     ov.querySelector("#c-save").disabled = false;
-    ov.remove(); SM.toast(slots.length ? `✓ Đã tạo lớp + ${slots.length} lịch tuần` : "✓ Đã lưu lớp", "ok"); SM.invalidate("classes"); loadClasses();
+    if (schedErr) { ov.remove(); SM.toast((c.id ? "Đã lưu lớp" : "Đã tạo lớp") + "; lịch tuần lỗi: " + schedErr.message + " — chỉnh ở 🗓️ Lịch học.", "err"); SM.invalidate("classes"); loadClasses(); return; }
+    ov.remove(); SM.toast((c.id ? "✓ Đã lưu lớp" : "✓ Đã tạo lớp") + note, "ok"); SM.invalidate("classes"); loadClasses();
+  }
+
+  // Khớp class_schedules của lớp với danh sách thứ đã chọn: cập nhật giờ (giữ id),
+  // thêm thứ mới (hiệu lực từ hôm nay/đầu lớp), xóa thứ bỏ chọn. Buổi đã sinh giữ nguyên.
+  async function syncSchedules(classId, slots, start, end) {
+    const { data, error: le } = await sb.from("class_schedules").select("*").eq("class_id", classId);
+    if (le) return { error: le };
+    const existing = data || [];
+    const want = new Map(slots.map(s => [s.weekday, s]));            // 1 dòng/thứ từ bảng chọn
+    const byDay = {};
+    existing.forEach(r => { (byDay[r.weekday] = byDay[r.weekday] || []).push(r); });
+    const today = SM.todayISO();
+    const effFrom = (start && start > today) ? start : today;       // ngày mới áp dụng từ đây trở đi
+    const effTo = end || null;
+
+    const toDelete = [], toUpdate = [], toInsert = [];
+    // Thứ đang có nhưng bỏ chọn → xóa (mọi dòng của thứ đó). Buổi đã sinh vẫn giữ.
+    Object.keys(byDay).forEach(w => { if (!want.has(+w)) byDay[w].forEach(r => toDelete.push(r.id)); });
+    // Thứ được chọn:
+    want.forEach((s, w) => {
+      const rows = byDay[w];
+      if (rows && rows.length) {                                     // đã có → cập nhật dòng đầu nếu đổi giờ
+        const r = rows[0];
+        if (r.start_time.slice(0, 5) !== s.start_time || r.end_time.slice(0, 5) !== s.end_time)
+          toUpdate.push({ id: r.id, start_time: s.start_time, end_time: s.end_time });
+      } else {                                                        // chưa có → thêm mới, hiệu lực từ nay
+        toInsert.push({ class_id: classId, weekday: w, start_time: s.start_time, end_time: s.end_time,
+          teacher_id: null, room: "", effective_from: effFrom, effective_to: effTo });
+      }
+    });
+
+    if (toDelete.length) { const { error } = await sb.from("class_schedules").delete().in("id", toDelete); if (error) return { error }; }
+    for (const u of toUpdate) { const { error } = await sb.from("class_schedules").update({ start_time: u.start_time, end_time: u.end_time }).eq("id", u.id); if (error) return { error }; }
+    if (toInsert.length) { const { error } = await sb.from("class_schedules").insert(toInsert); if (error) return { error }; }
+    return { error: null, added: toInsert.length, removed: toDelete.length, changed: toUpdate.length };
   }
   async function duplicateClass(id) {
     const c = cls(id);

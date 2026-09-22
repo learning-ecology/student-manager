@@ -158,7 +158,7 @@ window.Classes = (function () {
           <div class="sched-slots" id="c-slots"></div>
           <p class="muted" style="font-size:.82rem;margin:.4rem 0 0;">${isNew
             ? "Hiệu lực từ ngày bắt đầu lớp (mặc định hôm nay). Sau khi tạo, vào 🗓️ Lịch học bấm <b>⚡ Sinh buổi học</b> để tạo các buổi."
-            : "Thêm/bớt/đổi giờ sẽ đồng bộ với 🗓️ Lịch học. Buổi đã tạo trước đó <b>giữ nguyên</b>; ngày mới áp dụng từ hôm nay trở đi (bấm ⚡ Sinh buổi học để tạo)."}</p>
+            : "Thêm/bớt/đổi giờ sẽ đồng bộ với 🗓️ Lịch học và <b>tự động sinh các buổi còn thiếu</b> khi lưu. Buổi đã tạo trước đó <b>giữ nguyên</b>; ngày mới áp dụng từ hôm nay trở đi."}</p>
         </div>
         <div class="field" style="grid-column:1/-1;border-top:1px solid var(--line);padding-top:.7rem;">
           <label style="font-weight:600;">👥 Học viên <span class="muted" style="font-weight:400">— tùy chọn</span></label>
@@ -419,17 +419,18 @@ window.Classes = (function () {
       if (parts.length) stuNote = " · " + parts.join(", ");
     }
 
-    // Tự động sinh buổi học cho lớp MỚI có lịch tuần — dùng lại đúng RPC của nút ⚡ Sinh buổi học.
+    // Tự động sinh buổi học khi lớp có lịch tuần (cả tạo & sửa) — dùng lại đúng RPC của nút ⚡ Sinh buổi học.
+    // RPC an toàn: chỉ tạo buổi còn thiếu, không bao giờ sinh trùng hay sửa buổi đã có.
     let genNote = "";
-    if (!c.id && slots.length && newId) {
+    if (slots.length && newId) {
       const today = SM.todayISO();
       const from = (start && start > today) ? start : today;
       const iso = dt => dt.getFullYear() + "-" + String(dt.getMonth() + 1).padStart(2, "0") + "-" + String(dt.getDate()).padStart(2, "0");
       const d = new Date(today.slice(0, 8) + "01T00:00:00"); d.setMonth(d.getMonth() + 2); d.setDate(0);   // hết tháng sau
       const to = (end && end < iso(d)) ? end : iso(d);
       const { data: gcount, error: ge } = await sb.rpc("generate_sessions", { p_class: newId, p_from: from, p_to: to });
-      if (ge) { ov.remove(); SM.toast("✓ Đã tạo lớp" + note + stuNote + "; chưa sinh buổi được: " + ge.message + " — vào 🗓️ Lịch học bấm ⚡ Sinh buổi học.", "err"); SM.invalidate("classes"); loadClasses(); return; }
-      if (gcount > 0) { genNote = ` và tự động sinh ${gcount} buổi học`; note = ""; }   // buổi sinh ra đã ngụ ý lịch tuần
+      if (ge) { ov.remove(); SM.toast((c.id ? "✓ Đã lưu lớp" : "✓ Đã tạo lớp") + note + stuNote + "; chưa sinh buổi được: " + ge.message + " — vào 🗓️ Lịch học bấm ⚡ Sinh buổi học.", "err"); SM.invalidate("classes"); loadClasses(); return; }
+      if (gcount > 0) { genNote = ` và tự động sinh ${gcount} buổi học`; if (!c.id) note = ""; }   // buổi sinh ra đã ngụ ý lịch tuần
     }
     ov.remove(); SM.toast((c.id ? "✓ Đã lưu lớp" : "✓ Đã tạo lớp") + genNote + note + stuNote, "ok"); SM.invalidate("classes"); loadClasses();
   }

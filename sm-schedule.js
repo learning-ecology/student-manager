@@ -12,8 +12,8 @@ window.Schedule = (function () {
   const WD = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];      // thứ ngắn, theo weekday 0..6
   const WDFULL = SM.WEEKDAYS;                                  // thứ đầy đủ
   const WDORDER = [1, 2, 3, 4, 5, 6, 0];                       // hiển thị Thứ 2 → CN
-  const CS = { planned: "Sắp mở", active: "Đang học", completed: "Đã kết thúc" };
-  const CB = { planned: "warn", active: "ok", completed: "mute" };
+  const CS = { planned: "Sắp mở", active: "Đang học", paused: "Tạm dừng", completed: "Đã kết thúc", cancelled: "Đã hủy" };
+  const CB = { planned: "warn", active: "ok", paused: "warn", completed: "mute", cancelled: "bad" };
   const TYPE = { regular: "Buổi thường", makeup: "Buổi bù", extra: "Buổi thêm" };
   const SSTAT = { scheduled: "Theo lịch", held: "Đã học", cancelled: "Đã hủy" };
 

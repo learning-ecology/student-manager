@@ -12,8 +12,8 @@ window.Classes = (function () {
   let roster = [], rosterBusy = false, showFormer = false;
   const sel = new Set();
 
-  const CSTATUS = { planned: "Sắp mở", active: "Đang học", completed: "Đã kết thúc" };
-  const CBADGE = { planned: "warn", active: "ok", completed: "mute" };
+  const CSTATUS = { planned: "Sắp mở", active: "Đang học", paused: "Tạm dừng", completed: "Đã kết thúc", cancelled: "Đã hủy" };
+  const CBADGE = { planned: "warn", active: "ok", paused: "warn", completed: "mute", cancelled: "bad" };
   const METHOD = { per_scheduled: "Theo buổi có lịch", per_attended: "Theo buổi học thực tế",
                    per_cycle: "Theo chu kỳ (mỗi X buổi)",
                    fixed_monthly: "Cố định mỗi tháng", fixed_course: "Trọn khóa", custom: "Tùy học viên" };
@@ -425,7 +425,7 @@ window.Classes = (function () {
     //  • Có ngày kết thúc → sinh HẾT tới ngày đó (không giới hạn số buổi).
     //  • Không có ngày kết thúc → lớp mở, chỉ sinh hết THÁNG hiện tại (được bảo trì theo tháng ở startup).
     let genNote = "";
-    if (slots.length && newId) {
+    if (slots.length && newId && row.status !== "cancelled" && row.status !== "paused") {   // lớp hủy/tạm dừng → không sinh buổi
       const { from, to } = genRange(start, end, SM.todayISO());
       if (to >= from) {
         const { count, error: ge } = await generateSessionsRange(newId, from, to);
@@ -716,7 +716,7 @@ window.Classes = (function () {
     try {
       const [{ data: scheds }, { data: cs }] = await Promise.all([
         sb.from("class_schedules").select("class_id"),
-        sb.from("classes").select("id,start_date,end_date,status").is("archived_at", null).neq("status", "completed")
+        sb.from("classes").select("id,start_date,end_date,status").is("archived_at", null).not("status", "in", "(completed,cancelled,paused)")
       ]);
       const withSched = new Set((scheds || []).map(s => s.class_id));
       const targets = (cs || []).filter(c => withSched.has(c.id));

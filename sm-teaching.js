@@ -18,8 +18,8 @@ window.Ops = (function () {
   const nowHM = () => { const d = new Date(); return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); };
   const overlaps = (a1, a2, b1, b2) => a1 < b2 && b1 < a2;
 
-  const CBADGE = { planned: "warn", active: "ok", completed: "mute", archived: "mute" };
-  const CSTAT = { planned: "Sắp mở", active: "Đang học", completed: "Đã kết thúc", archived: "Lưu trữ" };
+  const CBADGE = { planned: "warn", active: "ok", paused: "warn", completed: "mute", cancelled: "bad", archived: "mute" };
+  const CSTAT = { planned: "Sắp mở", active: "Đang học", paused: "Tạm dừng", completed: "Đã kết thúc", cancelled: "Đã hủy", archived: "Lưu trữ" };
 
   // Trạng thái "sống" của lớp: ưu tiên hiển thị "Đang dạy" nếu có buổi diễn ra ngay bây giờ.
   function liveStatus(c) {

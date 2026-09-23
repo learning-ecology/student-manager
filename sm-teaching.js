@@ -7,6 +7,7 @@ window.Ops = (function () {
   let ME = null, box = null, busy = false;
   const st = { tab: "today", q: "", status: "", teacher: "", availDate: "", aS: "18:00", aE: "19:30", availRows: null };
   let classes = [], teachers = [], schedules = [], todaySess = [], sessCounts = [], activeCounts = {};
+  let checkinSet = new Set(), estBase = null;                          // Giai đoạn C/D: chấm công + lương ước tính
 
   const WD = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];               // theo getDay 0..6
   const hm = t => (t || "").slice(0, 5);
@@ -61,13 +62,21 @@ window.Ops = (function () {
     classes = cl || []; teachers = te || [];
     schedules = sc.data || []; todaySess = ts.data || []; sessCounts = all.data || [];
     activeCounts = {}; (en.data || []).forEach(e => activeCounts[e.class_id] = (activeCounts[e.class_id] || 0) + 1);
-    // đánh dấu buổi hôm nay đã điểm danh chưa (1 truy vấn gộp)
+    // đánh dấu buổi hôm nay đã điểm danh chưa + đã chấm công chưa (truy vấn gộp)
     const tIds = todaySess.map(s => s.id);
+    checkinSet = new Set();
     if (tIds.length) {
-      const { data: att } = await sb.from("attendance").select("session_id").in("session_id", tIds);
+      const [{ data: att }, ck] = await Promise.all([
+        sb.from("attendance").select("session_id").in("session_id", tIds),
+        sb.from("teacher_checkins").select("session_id").in("session_id", tIds)   // có thể lỗi nếu chưa chạy phaseC → bỏ qua
+      ]);
       const taken = new Set((att || []).map(a => a.session_id));
       todaySess.forEach(s => s._att = taken.has(s.id));
+      if (ck && !ck.error) (ck.data || []).forEach(c => checkinSet.add(c.session_id));
     }
+    // lương ước tính tháng hiện tại (dùng lại Phase B) — nền, không chặn
+    estBase = null;
+    try { const e = await (window.Payroll && Payroll.estimateMonth ? Payroll.estimateMonth(+today.slice(0, 4), +today.slice(5, 7)) : null); if (e && !e.err) estBase = e.base; } catch (e) {}
     busy = false; paint();
   }
 
@@ -290,8 +299,8 @@ window.Ops = (function () {
         ${tile("🟩", "GV đang rảnh", available.length)}
         ${tile("⚠️", "Lớp chưa gán GV", unassigned.length, unassigned.length ? "danger" : "", unassigned.slice(0, 3).map(c => SM.esc(c.name)).join(", "))}
         ${tile("❗", "Trùng lịch hôm nay", conflicts.length, conflicts.length ? "danger" : "")}
-        ${tile("💰", "Chờ duyệt chấm công", "—", "", "Giai đoạn B")}
-        ${tile("🧮", "Lương ước tính tháng", "—", "", "Giai đoạn B")}
+        ${tile("📲", "Chờ xác nhận (hôm nay)", live.filter(s => s.status === "held" && !checkinSet.has(s.id)).length, "", "buổi đã dạy chưa chấm công")}
+        ${tile("🧮", "Lương ước tính tháng", estBase == null ? "—" : SM.vnd(estBase), "", estBase == null ? "" : "theo buổi đã dạy")}
       </div>
       ${unassigned.length ? `<div class="card" style="padding:.8rem 1.1rem;margin-top:1rem;border-left:3px solid var(--danger);">
         <b>⚠️ Lớp chưa gán giáo viên (${unassigned.length})</b>

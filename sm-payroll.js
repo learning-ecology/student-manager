@@ -332,8 +332,36 @@ window.Payroll = (function () {
     SM.toast("🗑 Đã xóa định mức", "ok"); load();
   }
 
+  // Ước tính tổng tiền buổi của 1 tháng (dùng cho ô "Lương ước tính" ở Điều hành). Tự nạp dữ liệu, không đụng state.
+  async function estimateMonth(y, m) {
+    const r = monthRange(y, m);
+    const [cl, rt, ss] = await Promise.all([
+      SM.refClasses(),
+      sb.from("teacher_rates").select("*"),
+      sb.from("sessions").select("class_id,date,start_time,end_time,teacher_id,status").eq("status", "held").gte("date", r.start).lte("date", r.end)
+    ]);
+    if (rt.error) return { base: 0, count: 0, err: rt.error };
+    const R = rt.data || [], C = cl || [];
+    const clsOf = id => C.find(c => c.id === id) || {};
+    const resolve = (tid, cid, date) => {
+      const cand = R.filter(x => x.teacher_id === tid && x.effective_from <= date && (x.class_id === cid || x.class_id == null));
+      if (!cand.length) return null;
+      const by = (a, b) => a.effective_from < b.effective_from ? 1 : a.effective_from > b.effective_from ? -1 : 0;
+      const cc = cand.filter(x => x.class_id === cid).sort(by);
+      return cc[0] || cand.filter(x => x.class_id == null).sort(by)[0] || null;
+    };
+    let base = 0, count = 0;
+    for (const s of (ss.data || [])) {
+      const tid = s.teacher_id || clsOf(s.class_id).teacher_id; if (!tid) continue;
+      const hrs = hoursOf(s), rr = resolve(tid, s.class_id, s.date);
+      base += !rr ? 0 : (rr.kind === "per_hour" ? Math.round(rr.amount * hrs) : rr.amount); count++;
+    }
+    return { base, count };
+  }
+
   return {
     _calc: { resolveRate, computeAll, hoursOf, payStatus },   // để kiểm thử
+    estimateMonth,
     render(el, me) { ME = me; box = el; st.tab = "run"; st.teacher = ""; st.cls = ""; st.from = ""; st.to = ""; load(); }
   };
 })();

@@ -6,7 +6,7 @@
   <title>Quản lý học viên</title>
   <link rel="preconnect" href="https://zrmgunriwvcjppjykngk.supabase.co" crossorigin>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-  <link rel="stylesheet" href="sm.css?v=31">
+  <link rel="stylesheet" href="sm.css?v=32">
   <script>try{if(localStorage.getItem("sm_theme")==="dark")document.documentElement.setAttribute("data-theme","dark");}catch(e){}</script>
 </head>
 <body>
@@ -14,6 +14,7 @@
     <aside class="sm-side" id="side">
       <div class="sm-brand"><span class="logo">🎓</span><span id="brandName">Quản lý học viên</span></div>
       <nav class="sm-nav" id="nav">
+        <a href="#me" data-nav="me" id="navMe" hidden><span class="ic">🙋</span> Của tôi</a>
         <a href="#dashboard" data-nav="dashboard"><span class="ic">📊</span> Tổng quan</a>
         <div class="grp">Quản lý</div>
         <a href="#students" data-nav="students"><span class="ic">👤</span> Học viên</a>
@@ -51,22 +52,23 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=31"></script>
-  <script src="sm-lib.js?v=31"></script>
-  <script src="sm-students.js?v=31"></script>
-  <script src="sm-classes.js?v=31"></script>
-  <script src="sm-schedule.js?v=31"></script>
-  <script src="sm-teaching.js?v=31"></script>
-  <script src="sm-payroll.js?v=31"></script>
-  <script src="sm-checkin.js?v=31"></script>
-  <script src="sm-attendance.js?v=31"></script>
-  <script src="sm-tuition.js?v=31"></script>
-  <script src="sm-payments.js?v=31"></script>
-  <script src="sm-dashboard.js?v=31"></script>
-  <script src="sm-reports.js?v=31"></script>
-  <script src="sm-audit.js?v=31"></script>
-  <script src="sm-tenants.js?v=31"></script>
-  <script src="sm-handbook.js?v=31"></script>
+  <script src="config.js?v=32"></script>
+  <script src="sm-lib.js?v=32"></script>
+  <script src="sm-students.js?v=32"></script>
+  <script src="sm-classes.js?v=32"></script>
+  <script src="sm-schedule.js?v=32"></script>
+  <script src="sm-teaching.js?v=32"></script>
+  <script src="sm-payroll.js?v=32"></script>
+  <script src="sm-checkin.js?v=32"></script>
+  <script src="sm-teacher.js?v=32"></script>
+  <script src="sm-attendance.js?v=32"></script>
+  <script src="sm-tuition.js?v=32"></script>
+  <script src="sm-payments.js?v=32"></script>
+  <script src="sm-dashboard.js?v=32"></script>
+  <script src="sm-reports.js?v=32"></script>
+  <script src="sm-audit.js?v=32"></script>
+  <script src="sm-tenants.js?v=32"></script>
+  <script src="sm-handbook.js?v=32"></script>
   <script>
     const $ = id => document.getElementById(id);
     let ME = null, SETTINGS = null;
@@ -115,8 +117,12 @@
         <div class="card" style="padding:1.3rem;max-width:560px;margin-top:1rem;">
           <h2 style="font-size:1.1rem;margin:.1rem 0 .6rem;">Tài khoản đang đăng nhập</h2>
           <p style="margin:.2rem 0;">${SM.esc(ME.profile.full_name || ME.user.email)} · <span class="badge mute">${SM.roleLabel(ME.profile.role)}</span></p>
-          <p class="muted" style="font-size:.85rem;margin:.4rem 0 0;">Thêm tài khoản quản trị/giáo viên sẽ có ở giai đoạn sau. Hiện tại tạo tài khoản trong Supabase → Authentication, rồi đặt vai trò bằng SQL.</p>
-        </div>`;
+        </div>
+        ${owner ? `<div class="card" style="padding:1.3rem;max-width:560px;margin-top:1rem;">
+          <h2 style="font-size:1.1rem;margin:.1rem 0 .4rem;">Tài khoản giáo viên</h2>
+          <p class="muted" style="font-size:.85rem;margin:0 0 .6rem;">Liên kết giáo viên với một tài khoản đăng nhập để họ tự xem lịch, lớp, chấm công và lương của mình. Tạo tài khoản (email + mật khẩu) trong <b>Supabase → Authentication</b> trước, rồi liên kết bằng email tại đây.</p>
+          <div id="ta-list"><span class="spinner"></span></div>
+        </div>` : ""}`;
       if (owner) $("st-save").addEventListener("click", async () => {
         const msg = $("st-msg");
         const name = $("st-name").value.trim();
@@ -131,13 +137,44 @@
         msg.textContent = "✓ Đã lưu."; msg.className = "msg";
         SM.toast("✓ Đã lưu cài đặt", "ok");
       });
+      if (owner) loadTeacherAccounts();
     }
 
+    async function loadTeacherAccounts() {
+      const wrap = $("ta-list"); if (!wrap) return;
+      const { data: ts, error } = await sb.from("teachers").select("id,full_name,user_id").is("archived_at", null).order("full_name");
+      if (error) { wrap.innerHTML = `<p class="muted">Không tải được danh sách: ${SM.esc(error.message)}</p>`; return; }
+      if (!ts || !ts.length) { wrap.innerHTML = `<p class="muted">Chưa có giáo viên nào. Thêm giáo viên khi tạo lớp.</p>`; return; }
+      wrap.innerHTML = ts.map(t => `<div style="display:flex;align-items:center;gap:.6rem;padding:.45rem 0;border-bottom:1px solid var(--line);">
+        <span style="flex:1;"><b>${SM.esc(t.full_name)}</b> ${t.user_id ? '<span class="badge ok">đã liên kết</span>' : '<span class="badge mute">chưa liên kết</span>'}</span>
+        ${t.user_id ? `<button class="btn ghost" data-unlink="${t.id}" style="color:var(--danger);border-color:var(--danger);padding:.3rem .6rem;">Gỡ</button>`
+          : `<button class="btn ghost" data-link="${t.id}" style="padding:.3rem .6rem;">🔗 Liên kết</button>`}</div>`).join("");
+      wrap.querySelectorAll("[data-link]").forEach(b => b.onclick = async () => {
+        const email = window.prompt("Email đăng nhập của giáo viên (đã tạo trong Supabase → Authentication):");
+        if (!email || !email.trim()) return;
+        b.disabled = true;
+        const { error } = await sb.rpc("link_teacher_account", { p_teacher: b.dataset.link, p_email: email.trim() });
+        if (error) { b.disabled = false; return SM.toast("Không liên kết được: " + error.message, "err"); }
+        SM.toast("✓ Đã liên kết tài khoản giáo viên", "ok"); loadTeacherAccounts();
+      });
+      wrap.querySelectorAll("[data-unlink]").forEach(b => b.onclick = async () => {
+        const ok = await SM.confirmDialog({ title: "Gỡ liên kết tài khoản?", danger: true, okText: "Gỡ", body: "Giáo viên sẽ không đăng nhập xem được dữ liệu của mình nữa. Tài khoản đăng nhập bị vô hiệu hóa." });
+        if (!ok) return;
+        const { error } = await sb.rpc("unlink_teacher_account", { p_teacher: b.dataset.unlink });
+        if (error) return SM.toast("Không gỡ được: " + error.message, "err");
+        SM.toast("Đã gỡ liên kết", "ok"); loadTeacherAccounts();
+      });
+    }
+
+    const TEACHER_PANES = ["me", "checkin", "handbook"];
     function route() {
       const raw = (location.hash.replace("#", "") || "dashboard");
-      const pane = raw.split("?")[0];
+      let pane = raw.split("?")[0];
+      // giáo viên: chỉ vào được cổng của mình + trang check-in + hướng dẫn
+      if (ME && ME.profile.role === "teacher" && !TEACHER_PANES.includes(pane)) pane = "me";
       document.querySelectorAll("#nav a").forEach(a => a.classList.toggle("on", a.dataset.nav === pane));
       closeSide();
+      if (pane === "me") return Me.render($("content"), ME);
       if (pane === "checkin") {
         const s = new URLSearchParams(raw.split("?")[1] || "").get("s");
         return s ? Checkin.renderSelfCheckin($("content"), ME, s) : Checkin.render($("content"), ME);
@@ -183,6 +220,14 @@
       $("whoName").textContent = (ME.profile.full_name || ME.user.email) + " · " + SM.roleLabel(ME.profile.role);
       // mục "Quản lý giáo viên" chỉ hiện với chủ nền tảng
       if (ME.profile.is_platform_owner) $("navTenants").hidden = false;
+      // GIÁO VIÊN: chỉ hiện cổng "Của tôi" + Hướng dẫn, ẩn phần quản trị; mặc định vào #me
+      const isTeacher = ME.profile.role === "teacher";
+      if (isTeacher) {
+        $("navMe").hidden = false;
+        document.querySelectorAll("#nav a").forEach(a => { if (!["me", "handbook"].includes(a.dataset.nav)) a.hidden = true; });
+        const cur = (location.hash.replace("#", "").split("?")[0]);
+        if (!TEACHER_PANES.includes(cur)) location.hash = "#me";
+      }
       // biểu ngữ khi đang đăng nhập hộ (impersonate)
       try {
         const imp = sessionStorage.getItem("sm_impersonate");
@@ -195,8 +240,8 @@
       } catch (e) {}
       $("app").hidden = false;
       route();
-      // Bảo trì lịch: mỗi tháng tự sinh buổi cho lớp mở (không có ngày kết thúc). Chạy nền, không chặn UI.
-      try { Classes.ensureMonthlySessions(ME.profile.tenant_id); } catch (e) {}
+      // Bảo trì lịch: mỗi tháng tự sinh buổi cho lớp mở (chỉ nhân viên có quyền). Chạy nền, không chặn UI.
+      if (!isTeacher) { try { Classes.ensureMonthlySessions(ME.profile.tenant_id); } catch (e) {} }
     })();
   </script>
 </body>

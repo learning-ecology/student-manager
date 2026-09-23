@@ -6,7 +6,7 @@
   <title>Quản lý học viên</title>
   <link rel="preconnect" href="https://zrmgunriwvcjppjykngk.supabase.co" crossorigin>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-  <link rel="stylesheet" href="sm.css?v=29">
+  <link rel="stylesheet" href="sm.css?v=30">
   <script>try{if(localStorage.getItem("sm_theme")==="dark")document.documentElement.setAttribute("data-theme","dark");}catch(e){}</script>
 </head>
 <body>
@@ -24,6 +24,7 @@
         <div class="grp">Tài chính</div>
         <a href="#tuition" data-nav="tuition"><span class="ic">🧾</span> Học phí</a>
         <a href="#payments" data-nav="payments"><span class="ic">💵</span> Thanh toán</a>
+        <a href="#payroll" data-nav="payroll"><span class="ic">👩‍🏫</span> Lương giáo viên</a>
         <div class="grp">Khác</div>
         <a href="#reports" data-nav="reports"><span class="ic">📈</span> Báo cáo</a>
         <a href="#audit" data-nav="audit"><span class="ic">📜</span> Nhật ký</a>
@@ -49,20 +50,21 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=29"></script>
-  <script src="sm-lib.js?v=29"></script>
-  <script src="sm-students.js?v=29"></script>
-  <script src="sm-classes.js?v=29"></script>
-  <script src="sm-schedule.js?v=29"></script>
-  <script src="sm-teaching.js?v=29"></script>
-  <script src="sm-attendance.js?v=29"></script>
-  <script src="sm-tuition.js?v=29"></script>
-  <script src="sm-payments.js?v=29"></script>
-  <script src="sm-dashboard.js?v=29"></script>
-  <script src="sm-reports.js?v=29"></script>
-  <script src="sm-audit.js?v=29"></script>
-  <script src="sm-tenants.js?v=29"></script>
-  <script src="sm-handbook.js?v=29"></script>
+  <script src="config.js?v=30"></script>
+  <script src="sm-lib.js?v=30"></script>
+  <script src="sm-students.js?v=30"></script>
+  <script src="sm-classes.js?v=30"></script>
+  <script src="sm-schedule.js?v=30"></script>
+  <script src="sm-teaching.js?v=30"></script>
+  <script src="sm-payroll.js?v=30"></script>
+  <script src="sm-attendance.js?v=30"></script>
+  <script src="sm-tuition.js?v=30"></script>
+  <script src="sm-payments.js?v=30"></script>
+  <script src="sm-dashboard.js?v=30"></script>
+  <script src="sm-reports.js?v=30"></script>
+  <script src="sm-audit.js?v=30"></script>
+  <script src="sm-tenants.js?v=30"></script>
+  <script src="sm-handbook.js?v=30"></script>
   <script>
     const $ = id => document.getElementById(id);
     let ME = null, SETTINGS = null;
@@ -142,6 +144,7 @@
       if (pane === "attendance") return Attendance.render($("content"), ME);
       if (pane === "tuition") return Tuition.render($("content"), ME);
       if (pane === "payments") return Payments.render($("content"), ME);
+      if (pane === "payroll") return Payroll.render($("content"), ME);
       if (pane === "reports") return Reports.render($("content"), ME);
       if (pane === "audit") return Audit.render($("content"), ME);
       if (pane === "tenants") return Tenants.render($("content"), ME);

@@ -6,7 +6,7 @@
   <title>Quản lý học viên</title>
   <link rel="preconnect" href="https://zrmgunriwvcjppjykngk.supabase.co" crossorigin>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-  <link rel="stylesheet" href="sm.css?v=35">
+  <link rel="stylesheet" href="sm.css?v=36">
   <script>try{if(localStorage.getItem("sm_theme")==="dark")document.documentElement.setAttribute("data-theme","dark");}catch(e){}</script>
 </head>
 <body>
@@ -52,23 +52,24 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=35"></script>
-  <script src="sm-lib.js?v=35"></script>
-  <script src="sm-students.js?v=35"></script>
-  <script src="sm-classes.js?v=35"></script>
-  <script src="sm-schedule.js?v=35"></script>
-  <script src="sm-teaching.js?v=35"></script>
-  <script src="sm-payroll.js?v=35"></script>
-  <script src="sm-checkin.js?v=35"></script>
-  <script src="sm-teacher.js?v=35"></script>
-  <script src="sm-attendance.js?v=35"></script>
-  <script src="sm-tuition.js?v=35"></script>
-  <script src="sm-payments.js?v=35"></script>
-  <script src="sm-dashboard.js?v=35"></script>
-  <script src="sm-reports.js?v=35"></script>
-  <script src="sm-audit.js?v=35"></script>
-  <script src="sm-tenants.js?v=35"></script>
-  <script src="sm-handbook.js?v=35"></script>
+  <script src="config.js?v=36"></script>
+  <script src="sm-lib.js?v=36"></script>
+  <script src="sm-students.js?v=36"></script>
+  <script src="sm-classes.js?v=36"></script>
+  <script src="sm-schedule.js?v=36"></script>
+  <script src="sm-teaching.js?v=36"></script>
+  <script src="sm-payroll.js?v=36"></script>
+  <script src="sm-checkin.js?v=36"></script>
+  <script src="sm-teacher.js?v=36"></script>
+  <script src="sm-tour.js?v=36"></script>
+  <script src="sm-attendance.js?v=36"></script>
+  <script src="sm-tuition.js?v=36"></script>
+  <script src="sm-payments.js?v=36"></script>
+  <script src="sm-dashboard.js?v=36"></script>
+  <script src="sm-reports.js?v=36"></script>
+  <script src="sm-audit.js?v=36"></script>
+  <script src="sm-tenants.js?v=36"></script>
+  <script src="sm-handbook.js?v=36"></script>
   <script>
     const $ = id => document.getElementById(id);
     let ME = null, SETTINGS = null, TENANT = null;   // TENANT: {account_type, features} — quyết định module hiển thị
@@ -102,7 +103,8 @@
       SETTINGS = s || SETTINGS || {};
       const owner = ME.profile.role === "owner";
       $("content").innerHTML = `
-        <h1>Cài đặt</h1>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;">
+          <h1>Cài đặt</h1><button class="btn ghost" id="st-tour">🧭 Xem lại hướng dẫn nhanh</button></div>
         <div class="card" style="padding:1.3rem;max-width:560px;">
           <h2 style="font-size:1.1rem;margin:.1rem 0 .8rem;">Thông tin trung tâm</h2>
           <div class="field"><label>Tên trung tâm</label>
@@ -138,6 +140,7 @@
         msg.textContent = "✓ Đã lưu."; msg.className = "msg";
         SM.toast("✓ Đã lưu cài đặt", "ok");
       });
+      $("st-tour").onclick = () => Tour.startDefault(TENANT, ME.profile.role);
       if (owner && $("ta-list")) {
         loadTeacherAccounts();
         $("ta-add").onclick = async () => {
@@ -283,10 +286,11 @@
           <div style="display:flex;flex-wrap:wrap;gap:.45rem;">${mods.map(m => `<span class="badge mute" style="font-size:.88rem;padding:.3rem .6rem;">${m.icon} ${SM.esc(m.l)}</span>`).join("")}</div>
           ${indiv ? `<p class="muted" style="font-size:.83rem;margin:.9rem 0 0;">Cần thêm giáo viên, chấm công, tính lương? Có thể <b>nâng cấp lên gói Trung tâm</b> bất cứ lúc nào — dữ liệu của bạn giữ nguyên.</p>` : ""}
         </div>
-        <div class="mf"><button class="btn" data-x="close" style="margin-left:auto;">Bắt đầu →</button></div></div>`;
+        <div class="mf"><button class="btn ghost" data-x="later" style="margin-left:auto;">Để sau</button><button class="btn" id="onb-tour">🧭 Xem hướng dẫn nhanh</button></div></div>`;
       document.body.appendChild(ov);
-      const done = () => { try { localStorage.setItem(key, "1"); } catch (e) {} ov.remove(); };
-      ov.addEventListener("click", e => { if (e.target === ov || e.target.dataset.x === "close") done(); });
+      const done = tour => { try { localStorage.setItem(key, "1"); } catch (e) {} ov.remove(); if (tour) setTimeout(() => Tour.startDefault(TENANT, ME.profile.role), 60); };
+      ov.addEventListener("click", e => { if (e.target === ov || ["close", "later"].includes(e.target.dataset.x)) done(false); });
+      ov.querySelector("#onb-tour").onclick = () => done(true);
     }
   </script>
 </body>

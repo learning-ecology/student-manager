@@ -250,6 +250,16 @@ body.printing .receipt-print{position:fixed;left:0;top:0;width:100%;padding:2rem
   body.printing .sm-ov{position:static;background:none;padding:0;}
 }
 
+/* ---- hướng dẫn nhanh (guided tour) ---- */
+.tour-ov{position:fixed;inset:0;z-index:300;}
+.tour-spot{position:fixed;border-radius:10px;box-shadow:0 0 0 9999px rgba(10,18,34,.62);transition:left .2s,top .2s,width .2s,height .2s;pointer-events:none;}
+.tour-pop{position:fixed;z-index:301;width:290px;max-width:calc(100vw - 20px);background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:.9rem 1rem;}
+.tour-pop h4{margin:.1rem 0 .35rem;font-size:1.02rem;}
+.tour-pop p{margin:0;color:var(--muted);font-size:.9rem;line-height:1.45;}
+.tour-pop-ft{display:flex;align-items:center;gap:.4rem;margin-top:.85rem;flex-wrap:wrap;}
+.tour-pop-ft .tour-step{font-size:.8rem;color:var(--muted);margin-right:auto;}
+.tour-pop .btn{padding:.34rem .7rem;font-size:.87rem;}
+
 /* ---- lịch học cố định trong form thêm lớp ---- */
 .sched-days{display:flex;flex-wrap:wrap;gap:.4rem;margin:.5rem 0 .3rem;}
 .day-chip{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:999px;

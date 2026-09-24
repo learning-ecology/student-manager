@@ -6,7 +6,7 @@
   <title>Quản lý học viên</title>
   <link rel="preconnect" href="https://zrmgunriwvcjppjykngk.supabase.co" crossorigin>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-  <link rel="stylesheet" href="sm.css?v=33">
+  <link rel="stylesheet" href="sm.css?v=34">
   <script>try{if(localStorage.getItem("sm_theme")==="dark")document.documentElement.setAttribute("data-theme","dark");}catch(e){}</script>
 </head>
 <body>
@@ -52,23 +52,23 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=33"></script>
-  <script src="sm-lib.js?v=33"></script>
-  <script src="sm-students.js?v=33"></script>
-  <script src="sm-classes.js?v=33"></script>
-  <script src="sm-schedule.js?v=33"></script>
-  <script src="sm-teaching.js?v=33"></script>
-  <script src="sm-payroll.js?v=33"></script>
-  <script src="sm-checkin.js?v=33"></script>
-  <script src="sm-teacher.js?v=33"></script>
-  <script src="sm-attendance.js?v=33"></script>
-  <script src="sm-tuition.js?v=33"></script>
-  <script src="sm-payments.js?v=33"></script>
-  <script src="sm-dashboard.js?v=33"></script>
-  <script src="sm-reports.js?v=33"></script>
-  <script src="sm-audit.js?v=33"></script>
-  <script src="sm-tenants.js?v=33"></script>
-  <script src="sm-handbook.js?v=33"></script>
+  <script src="config.js?v=34"></script>
+  <script src="sm-lib.js?v=34"></script>
+  <script src="sm-students.js?v=34"></script>
+  <script src="sm-classes.js?v=34"></script>
+  <script src="sm-schedule.js?v=34"></script>
+  <script src="sm-teaching.js?v=34"></script>
+  <script src="sm-payroll.js?v=34"></script>
+  <script src="sm-checkin.js?v=34"></script>
+  <script src="sm-teacher.js?v=34"></script>
+  <script src="sm-attendance.js?v=34"></script>
+  <script src="sm-tuition.js?v=34"></script>
+  <script src="sm-payments.js?v=34"></script>
+  <script src="sm-dashboard.js?v=34"></script>
+  <script src="sm-reports.js?v=34"></script>
+  <script src="sm-audit.js?v=34"></script>
+  <script src="sm-tenants.js?v=34"></script>
+  <script src="sm-handbook.js?v=34"></script>
   <script>
     const $ = id => document.getElementById(id);
     let ME = null, SETTINGS = null;
@@ -120,7 +120,8 @@
         </div>
         ${owner ? `<div class="card" style="padding:1.3rem;max-width:560px;margin-top:1rem;">
           <h2 style="font-size:1.1rem;margin:.1rem 0 .4rem;">Tài khoản giáo viên</h2>
-          <p class="muted" style="font-size:.85rem;margin:0 0 .6rem;">Liên kết giáo viên với một tài khoản đăng nhập để họ tự xem lịch, lớp, chấm công và lương của mình. Tạo tài khoản (email + mật khẩu) trong <b>Supabase → Authentication</b> trước, rồi liên kết bằng email tại đây.</p>
+          <p class="muted" style="font-size:.85rem;margin:0 0 .6rem;">Liên kết giáo viên với một tài khoản đăng nhập để họ tự xem lịch, lớp, chấm công và lương của mình. Tạo tài khoản (email + mật khẩu) trong <b>Supabase → Authentication</b> trước (dùng email <b>khác</b> email chủ), rồi liên kết bằng email tại đây.</p>
+          <button class="btn ghost" id="ta-add" style="margin-bottom:.7rem;">➕ Thêm giáo viên</button>
           <div id="ta-list"><span class="spinner"></span></div>
         </div>` : ""}`;
       if (owner) $("st-save").addEventListener("click", async () => {
@@ -137,7 +138,16 @@
         msg.textContent = "✓ Đã lưu."; msg.className = "msg";
         SM.toast("✓ Đã lưu cài đặt", "ok");
       });
-      if (owner) loadTeacherAccounts();
+      if (owner) {
+        loadTeacherAccounts();
+        $("ta-add").onclick = async () => {
+          const name = window.prompt("Tên giáo viên:");
+          if (!name || !name.trim()) return;
+          const { error } = await sb.from("teachers").insert({ full_name: name.trim() });
+          if (error) return SM.toast("Không thêm được: " + error.message, "err");
+          SM.invalidate("teachers"); SM.toast("✓ Đã thêm giáo viên", "ok"); loadTeacherAccounts();
+        };
+      }
     }
 
     async function loadTeacherAccounts() {

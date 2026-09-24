@@ -14,6 +14,8 @@ alter table public.tenants add column if not exists account_type text not null d
 alter table public.tenants add column if not exists features jsonb not null default '{}'::jsonb;
 
 -- Cập nhật RPC tổng quan cho chủ nền tảng: kèm account_type + features
+-- (đổi cột trả về → phải DROP trước, "create or replace" không đổi được kiểu trả về)
+drop function if exists public.tenant_overview();
 create or replace function public.tenant_overview()
   returns table (tenant_id uuid, name text, status text, plan text, account_type text, features jsonb, created_at timestamptz,
                  students bigint, classes bigint, teachers bigint, users bigint, last_login timestamptz)

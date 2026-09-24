@@ -96,6 +96,33 @@ const SM = (function () {
 
   const roleLabel = r => ({ owner: "Chủ sở hữu", admin: "Quản trị", teacher: "Giáo viên" }[r] || r);
 
+  // ---- Danh mục module + bật/tắt theo loại tài khoản / tính năng (Giai đoạn G) ----
+  //  centerOnly: mặc định CHỈ bật cho trung tâm (cá nhân ẩn). always: luôn bật.
+  //  features (tenants.features) ghi đè: {module:true/false} do chủ nền tảng đặt.
+  const MODULES = [
+    { k: "dashboard", l: "Tổng quan", icon: "📊", always: true },
+    { k: "students", l: "Học viên", icon: "👤" },
+    { k: "classes", l: "Lớp học", icon: "🏫" },
+    { k: "schedule", l: "Lịch học", icon: "🗓️" },
+    { k: "ops", l: "Điều hành", icon: "🧭", centerOnly: true },
+    { k: "attendance", l: "Điểm danh", icon: "✅" },
+    { k: "checkin", l: "Chấm công GV", icon: "📲", centerOnly: true },
+    { k: "tuition", l: "Học phí", icon: "🧾" },
+    { k: "payments", l: "Thanh toán", icon: "💵" },
+    { k: "payroll", l: "Lương giáo viên", icon: "👩‍🏫", centerOnly: true },
+    { k: "reports", l: "Báo cáo", icon: "📈" },
+    { k: "audit", l: "Nhật ký", icon: "📜", centerOnly: true },
+    { k: "handbook", l: "Hướng dẫn sử dụng", icon: "📖", always: true }
+  ];
+  const moduleEnabled = (key, tenant) => {
+    const M = MODULES.find(m => m.k === key);
+    if (M && M.always) return true;
+    const f = (tenant && tenant.features) || {};
+    if (Object.prototype.hasOwnProperty.call(f, key)) return !!f[key];   // ghi đè của chủ nền tảng
+    if (tenant && tenant.account_type === "individual") return !(M && M.centerOnly);
+    return true;                                                          // trung tâm: bật hết
+  };
+
   // ---- Cache dữ liệu tham chiếu (lớp/giáo viên/cài đặt) ----
   //  Nhiều trang cùng cần danh sách lớp/giáo viên. Cache lại để KHÔNG tải
   //  lặp lại mỗi lần chuyển trang. Ghi (thêm/sửa/xóa lớp, GV, cài đặt) gọi
@@ -125,5 +152,5 @@ const SM = (function () {
   }, 300000);
 
   return { esc, vnd, vndPlain, dmy, dmyhm, hm, todayISO, parseDmy, WEEKDAYS, toast, confirmDialog, requireAuth, roleLabel, TZ,
-           refClasses, refTeachers, refSettings, invalidate };
+           refClasses, refTeachers, refSettings, invalidate, MODULES, moduleEnabled };
 })();

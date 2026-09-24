@@ -39,6 +39,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--accent-soft);bor
 .sm-nav a{display:flex;align-items:center;gap:.6rem;color:#c7d4ea;text-decoration:none;padding:.6rem .7rem;border-radius:9px;font-weight:600;font-size:.94rem;margin-bottom:2px;}
 .sm-nav a:hover{background:rgba(255,255,255,.08);color:#fff;}
 .sm-nav a.on{background:var(--accent);color:#fff;}
+.sm-nav a[hidden]{display:none;}   /* [hidden] phải thắng display:flex ở trên */
 .sm-nav .ic{width:20px;text-align:center;}
 .sm-nav .grp{font-size:.7rem;letter-spacing:.08em;text-transform:uppercase;color:#7f90b3;margin:.9rem .7rem .3rem;}
 .sm-backdrop{display:none;}   /* chỉ hiện trên mobile khi mở menu — nếu không ẩn, div này chiếm cột 2 của grid làm trống toàn bộ nội dung */

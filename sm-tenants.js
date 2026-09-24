@@ -9,6 +9,7 @@ window.Tenants = (function () {
   let rows = [], busy = false;
   const STATUS = { active: { l: "Hoạt động", c: "ok" }, trial: { l: "Dùng thử", c: "warn" },
                    suspended: { l: "Tạm ngưng", c: "bad" }, expired: { l: "Hết hạn", c: "mute" } };
+  const ACCT = { center: { l: "Trung tâm", c: "ok" }, individual: { l: "Cá nhân", c: "mute" } };
 
   async function callFn(bodyObj) {
     const { data, error } = await sb.functions.invoke("admin-tenants", { body: bodyObj });
@@ -42,18 +43,21 @@ window.Tenants = (function () {
       ${busy ? `<div class="card placeholder"><span class="spinner"></span></div>`
         : !rows.length ? `<div class="card placeholder"><div class="big">🏢</div><p class="muted">Chưa có workspace nào.</p></div>`
         : `<div class="sm-table-wrap"><table class="sm-table"><thead><tr>
-            <th>Trung tâm / Giáo viên</th><th>Trạng thái</th><th>Học viên</th><th>Lớp</th><th>Đăng nhập gần nhất</th><th></th></tr></thead><tbody>
+            <th>Trung tâm / Giáo viên</th><th>Loại</th><th>Trạng thái</th><th>Học viên</th><th>Lớp</th><th>Đăng nhập gần nhất</th><th></th></tr></thead><tbody>
           ${rows.map(r => {
             const me = r.tenant_id === myTid;
             const stt = STATUS[r.status] || { l: r.status, c: "mute" };
+            const acc = ACCT[r.account_type] || ACCT.center;
             const suspended = r.status === "suspended";
             return `<tr>
               <td data-th="Trung tâm"><b>${SM.esc(r.name)}</b>${me ? ' <span class="badge mute">của bạn</span>' : ""}<br><span class="muted" style="font-size:.8rem">Tạo ${SM.dmy(r.created_at)}</span></td>
+              <td data-th="Loại"><span class="badge ${acc.c}">${acc.l}</span></td>
               <td data-th="Trạng thái"><span class="badge ${stt.c}">${stt.l}</span></td>
               <td data-th="Học viên">${r.students}</td>
               <td data-th="Lớp">${r.classes}</td>
               <td data-th="Đăng nhập">${r.last_login ? SM.dmyhm(r.last_login) : "—"}</td>
               <td class="cell-actions"><div class="row-actions">
+                <button class="btn ghost" data-cfg="${r.tenant_id}">⚙ Cấu hình</button>
                 ${me ? '<span class="muted" style="font-size:.82rem;align-self:center">workspace của bạn</span>'
                   : `<button class="btn ghost" data-imp="${r.tenant_id}" data-name="${SM.esc(r.name)}">Đăng nhập hộ</button>
                      <button class="btn ghost" data-pw="${r.tenant_id}" data-name="${SM.esc(r.name)}">Đổi mật khẩu</button>
@@ -65,10 +69,47 @@ window.Tenants = (function () {
     box.onclick = onClick;
   }
 
+  // ⚙ Cấu hình loại tài khoản + bật/tắt module cho 1 workspace (chủ nền tảng)
+  function configForm(tid) {
+    const r = rows.find(x => x.tenant_id === tid) || {};
+    const gateable = SM.MODULES.filter(m => !m.always);
+    const toggles = (acct, features) => gateable.map(m => {
+      const on = SM.moduleEnabled(m.k, { account_type: acct, features });
+      return `<label style="display:flex;align-items:center;gap:.55rem;padding:.28rem .2rem;border-bottom:1px solid var(--line);cursor:pointer;">
+        <input type="checkbox" data-mod="${m.k}" ${on ? "checked" : ""} style="width:auto"> ${m.icon} ${m.l}${m.centerOnly ? ' <span class="muted" style="font-size:.78rem">· dành cho trung tâm</span>' : ""}</label>`;
+    }).join("");
+    const ov = document.createElement("div"); ov.className = "sm-ov";
+    ov.innerHTML = `<div class="sm-modal" style="max-width:480px;"><div class="mh"><h3>⚙ Cấu hình · ${SM.esc(r.name || "")}</h3><button class="btn ghost" data-x="close">✕</button></div>
+      <div class="mb">
+        <div class="field"><label>Loại tài khoản</label><select id="cfg-acct">
+          <option value="center" ${r.account_type !== "individual" ? "selected" : ""}>Trung tâm (đầy đủ)</option>
+          <option value="individual" ${r.account_type === "individual" ? "selected" : ""}>Cá nhân (giáo viên)</option></select></div>
+        <p class="muted" style="font-size:.83rem;margin:.3rem 0 .5rem;">Đổi loại sẽ đặt lại các mục theo mặc định của loại đó. Sau đó bạn có thể bật/tắt từng mục để nâng cấp/hạ cấp tính năng cho khách này.</p>
+        <div id="cfg-mods">${toggles(r.account_type || "center", r.features || {})}</div>
+      </div>
+      <div class="mf"><button class="btn ghost" data-x="close">Hủy</button><button class="btn" id="cfg-go">💾 Lưu cấu hình</button>
+        <span class="msg" id="cfg-msg" style="align-self:center"></span></div></div>`;
+    document.body.appendChild(ov);
+    ov.addEventListener("click", e => { if (e.target === ov || e.target.dataset.x === "close") ov.remove(); });
+    ov.querySelector("#cfg-acct").onchange = e => { ov.querySelector("#cfg-mods").innerHTML = toggles(e.target.value, {}); };
+    ov.querySelector("#cfg-go").addEventListener("click", async () => {
+      const say = (t, e) => { const m = ov.querySelector("#cfg-msg"); m.textContent = t; m.className = "msg" + (e ? " err" : ""); };
+      const account_type = ov.querySelector("#cfg-acct").value;
+      const features = {}; ov.querySelectorAll("[data-mod]").forEach(c => features[c.dataset.mod] = c.checked);
+      ov.querySelector("#cfg-go").disabled = true; say("Đang lưu…");
+      const { error } = await sb.from("tenants").update({ account_type, features }).eq("id", tid);
+      if (error) { ov.querySelector("#cfg-go").disabled = false; return say("Không lưu được: " + error.message, true); }
+      ov.remove(); SM.toast("✓ Đã lưu cấu hình workspace", "ok"); load();
+    });
+  }
+
   function createForm() {
     const ov = document.createElement("div"); ov.className = "sm-ov";
     ov.innerHTML = `<div class="sm-modal" style="max-width:460px;"><div class="mh"><h3>➕ Tạo tài khoản giáo viên</h3><button class="btn ghost" data-x="close">✕</button></div>
       <div class="mb">
+        <div class="field"><label>Loại tài khoản *</label><select id="t-acct">
+          <option value="center">Trung tâm / tổ chức — nhiều giáo viên, lớp, học viên</option>
+          <option value="individual">Giáo viên cá nhân — tự quản lý lớp &amp; học viên</option></select></div>
         <div class="field"><label>Tên trung tâm / giáo viên *</label><input id="t-name" placeholder="vd: Trung tâm Anh ngữ ABC"></div>
         <div class="grid2">
           <div class="field"><label>Họ tên người quản lý</label><input id="t-full"></div>
@@ -89,10 +130,15 @@ window.Tenants = (function () {
       if (!name) return say("Nhập tên trung tâm.", true);
       if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return say("Email không hợp lệ.", true);
       if ((pw || "").length < 6) return say("Mật khẩu tối thiểu 6 ký tự.", true);
+      const accountType = ov.querySelector("#t-acct").value;
       ov.querySelector("#t-go").disabled = true; say("Đang tạo…");
-      const res = await callFn({ action: "create", email, password: pw, tenantName: name, fullName: ov.querySelector("#t-full").value.trim() });
+      const res = await callFn({ action: "create", email, password: pw, tenantName: name, fullName: ov.querySelector("#t-full").value.trim(), accountType });
       if (res.error) { ov.querySelector("#t-go").disabled = false; return say(res.error, true); }
-      ov.remove(); SM.toast("✓ Đã tạo tài khoản giáo viên", "ok"); load();
+      // đặt loại tài khoản (Edge Function có thể chưa xử lý accountType) — cập nhật trực tiếp khi xác định được 1 workspace trùng tên
+      if (accountType === "individual") {
+        try { const { data: m } = await sb.from("tenants").select("id").eq("name", name); if (m && m.length === 1) await sb.from("tenants").update({ account_type: "individual" }).eq("id", m[0].id); } catch (_) {}
+      }
+      ov.remove(); SM.toast("✓ Đã tạo tài khoản " + (accountType === "individual" ? "giáo viên cá nhân" : "trung tâm"), "ok"); load();
     });
   }
 
@@ -154,9 +200,10 @@ window.Tenants = (function () {
   }
 
   function onClick(e) {
-    const b = e.target.closest("[data-act],[data-imp],[data-pw],[data-status],[data-del]");
+    const b = e.target.closest("[data-act],[data-cfg],[data-imp],[data-pw],[data-status],[data-del]");
     if (!b) return;
     if (b.dataset.act === "add") return createForm();
+    if (b.dataset.cfg) return configForm(b.dataset.cfg);
     if (b.dataset.imp) return impersonate(b.dataset.imp, b.dataset.name);
     if (b.dataset.pw) return pwForm(b.dataset.pw, b.dataset.name);
     if (b.dataset.status) return setStatus(b.dataset.status, b.dataset.to);

@@ -250,6 +250,14 @@ body.printing .receipt-print{position:fixed;left:0;top:0;width:100%;padding:2rem
   body.printing .sm-ov{position:static;background:none;padding:0;}
 }
 
+/* ---- chọn màu lớp ---- */
+.color-swatches{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center;margin-top:.35rem;}
+.swatch{width:26px;height:26px;border-radius:50%;border:2px solid var(--line);cursor:pointer;padding:0;transition:transform .1s;}
+.swatch:hover{transform:scale(1.1);}
+.swatch.on{border-color:var(--ink);box-shadow:0 0 0 2px var(--card),0 0 0 4px var(--accent);}
+.swatch.none{background:var(--card);color:var(--muted);font-size:.9rem;line-height:1;display:inline-flex;align-items:center;justify-content:center;}
+.color-swatches input[type=color]{width:36px;height:30px;padding:2px;border:1px solid var(--line);border-radius:8px;cursor:pointer;background:var(--card);}
+
 /* ---- hướng dẫn nhanh (guided tour) ---- */
 .tour-ov{position:fixed;inset:0;z-index:300;}
 .tour-spot{position:fixed;border-radius:10px;box-shadow:0 0 0 9999px rgba(10,18,34,.62);transition:left .2s,top .2s,width .2s,height .2s;pointer-events:none;}

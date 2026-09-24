@@ -114,6 +114,19 @@ const SM = (function () {
     { k: "audit", l: "Nhật ký", icon: "📜", centerOnly: true },
     { k: "handbook", l: "Hướng dẫn sử dụng", icon: "📖", always: true }
   ];
+  // ---- Màu lớp (Giai đoạn H) — nguồn duy nhất, dùng lại ở Lịch học, Điều hành, Điểm danh… ----
+  const CLASS_COLORS = [
+    { n: "Xanh dương", h: "#2563eb" }, { n: "Xanh lá", h: "#16a34a" }, { n: "Cam", h: "#ea580c" },
+    { n: "Đỏ", h: "#dc2626" }, { n: "Tím", h: "#7c3aed" }, { n: "Xanh ngọc", h: "#0d9488" },
+    { n: "Hồng", h: "#db2777" }, { n: "Vàng", h: "#d97706" }, { n: "Lam", h: "#0891b2" }, { n: "Xám", h: "#64748b" }
+  ];
+  const CLASS_COLOR_DEFAULT = "#94a3b8";
+  // Trả về bộ style nhất quán (viền + nền mờ) từ mã màu lớp; hoạt động ở cả sáng/tối vì nền chỉ ~13% alpha.
+  const classTint = hex => {
+    const h = (hex && /^#[0-9a-fA-F]{6}$/.test(hex)) ? hex : CLASS_COLOR_DEFAULT;
+    return { solid: h, border: h, bg: h + "22" };
+  };
+
   const moduleEnabled = (key, tenant) => {
     const M = MODULES.find(m => m.k === key);
     if (M && M.always) return true;
@@ -138,7 +151,7 @@ const SM = (function () {
   const invalidate = key => { if (key === undefined) { for (const k in _rc) delete _rc[k]; } else delete _rc[key]; };
   const refClasses = () => _cache("classes", async () => {
     const { data } = await sb.from("classes")
-      .select("id,name,teacher_id,room,online_link,start_date,end_date,status,subject,max_students,tuition_method,tuition_amount,billing_cycle,billing_start,billing_include_future")
+      .select("id,name,teacher_id,room,online_link,start_date,end_date,status,subject,max_students,tuition_method,tuition_amount,billing_cycle,billing_start,billing_include_future,color")
       .is("archived_at", null).order("name");
     return data || [];
   });
@@ -152,5 +165,6 @@ const SM = (function () {
   }, 300000);
 
   return { esc, vnd, vndPlain, dmy, dmyhm, hm, todayISO, parseDmy, WEEKDAYS, toast, confirmDialog, requireAuth, roleLabel, TZ,
-           refClasses, refTeachers, refSettings, invalidate, MODULES, moduleEnabled };
+           refClasses, refTeachers, refSettings, invalidate, MODULES, moduleEnabled,
+           CLASS_COLORS, CLASS_COLOR_DEFAULT, classTint };
 })();

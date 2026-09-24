@@ -101,7 +101,7 @@ window.Classes = (function () {
   function rowHtml(c) {
     const n = counts[c.id] || 0, cap = c.max_students;
     return `<tr>
-      <td data-th="Tên lớp"><b>${SM.esc(c.name)}</b>${c.start_date ? `<br><span class="muted" style="font-size:.82rem">Từ ${SM.dmy(c.start_date)}${c.end_date ? " → " + SM.dmy(c.end_date) : ""}</span>` : ""}</td>
+      <td data-th="Tên lớp"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${SM.classTint(c.color).solid};margin-right:.45rem;vertical-align:middle;"></span><b>${SM.esc(c.name)}</b>${c.start_date ? `<br><span class="muted" style="font-size:.82rem">Từ ${SM.dmy(c.start_date)}${c.end_date ? " → " + SM.dmy(c.end_date) : ""}</span>` : ""}</td>
       <td data-th="Môn">${SM.esc(c.subject || "—")}</td>
       <td data-th="Giáo viên">${SM.esc(tName(c.teacher_id))}</td>
       <td data-th="Sĩ số">${n}${cap != null ? " / " + cap : ""}${cap != null && n >= cap ? ' <span class="badge bad">đầy</span>' : ""}</td>
@@ -134,6 +134,13 @@ window.Classes = (function () {
         <div class="field"><label>Sĩ số tối đa</label><input id="c-max" type="number" min="1" value="${g("max_students", "")}" placeholder="không giới hạn"></div>
         <div class="field"><label>Trạng thái</label><select id="c-status">
           ${Object.entries(CSTATUS).map(([k, v]) => `<option value="${k}" ${g("status", "planned") === k ? "selected" : ""}>${v}</option>`).join("")}</select></div>
+        <div class="field" style="grid-column:1/-1"><label>Màu lớp <span class="muted" style="font-weight:400">— để phân biệt trên lịch (tùy bạn quy ước)</span></label>
+          <div class="color-swatches" id="c-colors">
+            <button type="button" class="swatch none${g("color") ? "" : " on"}" data-color="" title="Mặc định (không màu)">∅</button>
+            ${SM.CLASS_COLORS.map(cc => `<button type="button" class="swatch${g("color") === cc.h ? " on" : ""}" data-color="${cc.h}" title="${cc.n}" style="background:${cc.h}"></button>`).join("")}
+            <input type="color" id="c-colorpick" value="${g("color") || SM.CLASS_COLOR_DEFAULT}" title="Màu tùy chọn">
+          </div>
+          <input type="hidden" id="c-color" value="${g("color") || ""}"></div>
         <div class="field"><label>Ngày bắt đầu (DD/MM/YYYY)</label><input id="c-start" value="${c.start_date ? SM.dmy(c.start_date) : ""}"></div>
         <div class="field"><label>Ngày kết thúc dự kiến</label><input id="c-end" value="${c.end_date ? SM.dmy(c.end_date) : ""}"></div>
         <div class="field"><label>Cách tính học phí</label><select id="c-method">
@@ -190,6 +197,11 @@ window.Classes = (function () {
     };
     ov._schedLoad = wireSchedule(ov, c);   // promise nạp lịch tuần hiện có (chống lưu sớm)
     wireStudents(ov, c);
+    // màu lớp: chọn swatch hoặc màu tùy chọn
+    const colorsEl = ov.querySelector("#c-colors"), colorHid = ov.querySelector("#c-color"), colorPick = ov.querySelector("#c-colorpick");
+    const markColor = val => colorsEl.querySelectorAll(".swatch").forEach(s => s.classList.toggle("on", (s.dataset.color || "") === (val || "")));
+    colorsEl.querySelectorAll(".swatch").forEach(s => s.addEventListener("click", () => { colorHid.value = s.dataset.color || ""; if (s.dataset.color) colorPick.value = s.dataset.color; markColor(colorHid.value); }));
+    colorPick.addEventListener("input", () => { colorHid.value = colorPick.value; markColor(colorPick.value); });
     ov.querySelector("#c-save").addEventListener("click", () => saveClass(ov, c));
   }
 
@@ -365,7 +377,7 @@ window.Classes = (function () {
       name, subject: V("c-subject").trim(), teacher_id: V("c-teacher") || null,
       room: V("c-room").trim(), online_link: V("c-link").trim(),
       max_students: maxRaw === "" ? null : Math.max(1, parseInt(maxRaw, 10) || 1),
-      status: V("c-status"), start_date: start, end_date: end,
+      status: V("c-status"), start_date: start, end_date: end, color: V("c-color") || null,
       tuition_method: V("c-method"), tuition_amount: Math.max(0, parseInt(V("c-fee"), 10) || 0),
       billing_cycle: cycleRaw === "" ? null : Math.max(1, parseInt(cycleRaw, 10) || 1),
       billing_start: billStart, billing_include_future: ov.querySelector("#c-billfuture").checked,
@@ -472,7 +484,7 @@ window.Classes = (function () {
   }
   async function duplicateClass(id) {
     const c = cls(id);
-    const copy = { name: c.name + " (bản sao)", subject: c.subject, teacher_id: c.teacher_id, room: c.room,
+    const copy = { name: c.name + " (bản sao)", subject: c.subject, teacher_id: c.teacher_id, room: c.room, color: c.color,
       online_link: c.online_link, max_students: c.max_students, status: "planned",
       tuition_method: c.tuition_method, tuition_amount: c.tuition_amount, notes: c.notes };
     const { error } = await sb.from("classes").insert(copy);

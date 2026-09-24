@@ -62,7 +62,11 @@ window.Schedule = (function () {
     const { data, error } = await q;
     busy = false;
     if (error) { SM.toast("Lỗi tải buổi học: " + error.message, "err"); sessions = []; }
-    else sessions = data || [];
+    else {
+      // Ẩn buổi của lớp đã lưu trữ/đã xóa khỏi lịch hoạt động (classes = chỉ lớp còn hiệu lực).
+      const active = new Set(classes.map(c => c.id));
+      sessions = (data || []).filter(s => active.has(s.class_id));
+    }
     paint();
   }
 
@@ -104,7 +108,8 @@ window.Schedule = (function () {
     const conf = confSet.has(s.id);
     const type = s.type === "makeup" ? '<span class="badge warn">Bù</span>' : s.type === "extra" ? '<span class="badge mute">Thêm</span>' : "";
     const stat = s.status === "cancelled" ? '<span class="badge bad">Hủy</span>' : s.status === "held" ? '<span class="badge ok">Đã học</span>' : "";
-    return `<div class="sess ${s.status}${conf ? " conf" : ""}" data-sess="${s.id}" title="Bấm để sửa buổi này">
+    const t = SM.classTint(cls(s.class_id).color);
+    return `<div class="sess ${s.status}${conf ? " conf" : ""}" data-sess="${s.id}" title="Bấm để sửa buổi này" style="border-left-color:${t.border};background:${t.bg};">
       <b>${SM.hm(s.start_time)}–${SM.hm(s.end_time)}</b> ${conf ? "⚠️" : ""} ${type} ${stat}
       <span class="sname">${SM.esc(cName(s.class_id))}</span>
       <span class="muted" style="font-size:.78rem;display:block">${SM.esc(tName(s.teacher_id))}${s.room ? " · " + SM.esc(s.room) : ""}</span>
@@ -126,7 +131,7 @@ window.Schedule = (function () {
         const list = byDate[d] || [];
         cells += `<div class="cal-cell${d.slice(0, 7) !== m ? " out" : ""}${d === today ? " today" : ""}${d === st.anchor && d !== today ? " sel" : ""}${hmap[d] ? " holiday" : ""}" data-day="${d}">
           <div class="dn">${+d.slice(8)}${hmap[d] ? `<span class="hn">${SM.esc(hmap[d])}</span>` : ""}</div>
-          ${list.slice(0, 3).map(s => `<div class="mini ${s.status}">${SM.hm(s.start_time)} ${SM.esc(cName(s.class_id))}${confs.has(s.id) ? " ⚠️" : ""}</div>`).join("")}
+          ${list.slice(0, 3).map(s => { const t = SM.classTint(cls(s.class_id).color); return `<div class="mini ${s.status}" style="border-left:3px solid ${t.border};background:${t.bg};padding-left:.32rem;border-radius:4px;">${SM.hm(s.start_time)} ${SM.esc(cName(s.class_id))}${confs.has(s.id) ? " ⚠️" : ""}</div>`; }).join("")}
           ${list.length > 3 ? `<div class="mini more">+${list.length - 3} buổi nữa</div>` : ""}
         </div>`;
       }

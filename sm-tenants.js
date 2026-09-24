@@ -134,10 +134,12 @@ window.Tenants = (function () {
       ov.querySelector("#t-go").disabled = true; say("Đang tạo…");
       const res = await callFn({ action: "create", email, password: pw, tenantName: name, fullName: ov.querySelector("#t-full").value.trim(), accountType });
       if (res.error) { ov.querySelector("#t-go").disabled = false; return say(res.error, true); }
-      // đặt loại tài khoản (Edge Function có thể chưa xử lý accountType) — cập nhật trực tiếp khi xác định được 1 workspace trùng tên
-      if (accountType === "individual") {
-        try { const { data: m } = await sb.from("tenants").select("id").eq("name", name); if (m && m.length === 1) await sb.from("tenants").update({ account_type: "individual" }).eq("id", m[0].id); } catch (_) {}
-      }
+      // đặt loại tài khoản cho workspace vừa tạo (Edge Function có thể chưa xử lý accountType).
+      // Nhắm bản ghi MỚI NHẤT trùng tên = workspace vừa tạo → luôn tôn trọng lựa chọn (cả center lẫn individual).
+      try {
+        const { data: m } = await sb.from("tenants").select("id").eq("name", name).order("created_at", { ascending: false }).limit(1);
+        if (m && m[0]) await sb.from("tenants").update({ account_type: accountType }).eq("id", m[0].id);
+      } catch (_) {}
       ov.remove(); SM.toast("✓ Đã tạo tài khoản " + (accountType === "individual" ? "giáo viên cá nhân" : "trung tâm"), "ok"); load();
     });
   }

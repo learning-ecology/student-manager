@@ -101,7 +101,7 @@ window.Classes = (function () {
   function rowHtml(c) {
     const n = counts[c.id] || 0, cap = c.max_students;
     return `<tr>
-      <td data-th="Tên lớp"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${SM.classTint(c.color).solid};margin-right:.45rem;vertical-align:middle;"></span><b>${SM.esc(c.name)}</b>${c.start_date ? `<br><span class="muted" style="font-size:.82rem">Từ ${SM.dmy(c.start_date)}${c.end_date ? " → " + SM.dmy(c.end_date) : ""}</span>` : ""}</td>
+      <td data-th="Tên lớp">${SM.classDot(c.color)}<b>${SM.esc(c.name)}</b>${c.start_date ? `<br><span class="muted" style="font-size:.82rem">Từ ${SM.dmy(c.start_date)}${c.end_date ? " → " + SM.dmy(c.end_date) : ""}</span>` : ""}</td>
       <td data-th="Môn">${SM.esc(c.subject || "—")}</td>
       <td data-th="Giáo viên">${SM.esc(tName(c.teacher_id))}</td>
       <td data-th="Sĩ số">${n}${cap != null ? " / " + cap : ""}${cap != null && n >= cap ? ' <span class="badge bad">đầy</span>' : ""}</td>

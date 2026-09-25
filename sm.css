@@ -251,6 +251,7 @@ body.printing .receipt-print{position:fixed;left:0;top:0;width:100%;padding:2rem
 }
 
 /* ---- chọn màu lớp ---- */
+.cls-dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:.4rem;vertical-align:middle;flex:none;}
 .color-swatches{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center;margin-top:.35rem;}
 .swatch{width:26px;height:26px;border-radius:50%;border:2px solid var(--line);cursor:pointer;padding:0;transition:transform .1s;}
 .swatch:hover{transform:scale(1.1);}

@@ -68,7 +68,7 @@ window.Checkin = (function () {
           : `<span class="badge warn">chưa gán GV</span>`);
       return `<tr>
         <td data-th="Giờ"><b>${hm(s.start_time)}–${hm(s.end_time)}</b></td>
-        <td data-th="Lớp"><b>${SM.esc(cName(s.class_id))}</b></td>
+        <td data-th="Lớp">${SM.classDot(cls(s.class_id).color)}<b>${SM.esc(cName(s.class_id))}</b></td>
         <td data-th="Giáo viên">${eff ? SM.esc(tName(ck ? ck.teacher_id : eff)) : `<span class="badge warn">chưa gán</span>`}</td>
         <td data-th="Chấm công">${statusCell}</td>
         <td class="cell-actions"><div class="row-actions">${actions}</div></td></tr>`;

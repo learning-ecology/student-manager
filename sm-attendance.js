@@ -98,7 +98,7 @@ window.Attendance = (function () {
         <div style="min-width:88px;"><b style="font-size:1.05rem;">${SM.hm(s.start_time)}</b><br>
           <span class="muted" style="font-size:.8rem;">${SM.hm(s.start_time)}–${SM.hm(s.end_time)}</span></div>
         <div style="flex:1;min-width:180px;">
-          <b>${SM.esc(cName(s.class_id))}</b> ${s.type !== "regular" ? `<span class="badge mute">${s.type === "makeup" ? "Bù" : "Thêm"}</span>` : ""}<br>
+          ${SM.classDot(cls(s.class_id).color)}<b>${SM.esc(cName(s.class_id))}</b> ${s.type !== "regular" ? `<span class="badge mute">${s.type === "makeup" ? "Bù" : "Thêm"}</span>` : ""}<br>
           <span class="muted" style="font-size:.82rem;">GV ${SM.esc(tName(s.teacher_id))}${s.room ? " · " + SM.esc(s.room) : ""} · sĩ số ${exp}</span></div>
         <div>${badge}</div>
         <div>${cancelled ? "" : `<button class="btn" data-mark="${s.id}">${done ? "✏️ Sửa điểm danh" : "✅ Điểm danh"}</button>`}</div>

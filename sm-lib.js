@@ -126,6 +126,8 @@ const SM = (function () {
     const h = (hex && /^#[0-9a-fA-F]{6}$/.test(hex)) ? hex : CLASS_COLOR_DEFAULT;
     return { solid: h, border: h, bg: h + "22" };
   };
+  // Chấm màu tròn nhỏ dùng chung trước tên lớp (Lịch học, Điều hành, Điểm danh, Chấm công, cổng GV…)
+  const classDot = color => `<span class="cls-dot" style="background:${classTint(color).solid}"></span>`;
 
   const moduleEnabled = (key, tenant) => {
     const M = MODULES.find(m => m.k === key);
@@ -166,5 +168,5 @@ const SM = (function () {
 
   return { esc, vnd, vndPlain, dmy, dmyhm, hm, todayISO, parseDmy, WEEKDAYS, toast, confirmDialog, requireAuth, roleLabel, TZ,
            refClasses, refTeachers, refSettings, invalidate, MODULES, moduleEnabled,
-           CLASS_COLORS, CLASS_COLOR_DEFAULT, classTint };
+           CLASS_COLORS, CLASS_COLOR_DEFAULT, classTint, classDot };
 })();

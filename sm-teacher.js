@@ -66,7 +66,7 @@ window.Me = (function () {
     return `<tr>
       ${showDate ? `<td data-th="Ngày">${SM.dmy(s.date)}</td>` : ""}
       <td data-th="Giờ"><b>${hm(s.start_time)}–${hm(s.end_time)}</b></td>
-      <td data-th="Lớp"><b>${SM.esc(cName(s.class_id))}</b>${s.type !== "regular" ? ` <span class="muted">(${s.type === "makeup" ? "bù" : "thêm"})</span>` : ""}</td>
+      <td data-th="Lớp">${SM.classDot(cls(s.class_id).color)}<b>${SM.esc(cName(s.class_id))}</b>${s.type !== "regular" ? ` <span class="muted">(${s.type === "makeup" ? "bù" : "thêm"})</span>` : ""}</td>
       <td data-th="HV">${cntActive(s.class_id)}</td>
       <td data-th="Phòng">${SM.esc(s.room || cls(s.class_id).room || (s.online_link || cls(s.class_id).online_link ? "Online" : "—"))}</td>
       <td data-th="Chấm công">${status}</td>
@@ -82,7 +82,7 @@ window.Me = (function () {
       <p class="muted" style="margin:.1rem 0 .7rem;">${SM.WEEKDAYS[fromISO(today).getDay()]}, ${SM.dmy(today)} · <b>${list.filter(s => s.status !== "cancelled").length}</b> buổi</p>
       ${next ? `<div class="card" style="padding:.9rem 1.1rem;margin-bottom:.9rem;border-left:3px solid var(--accent);">
         <div class="muted" style="font-size:.82rem;">Buổi tiếp theo</div>
-        <div style="font-size:1.15rem;font-weight:700;margin:.15rem 0;">${SM.esc(cName(next.class_id))}</div>
+        <div style="font-size:1.15rem;font-weight:700;margin:.15rem 0;">${SM.classDot(cls(next.class_id).color)}${SM.esc(cName(next.class_id))}</div>
         <div>${hm(next.start_time)}–${hm(next.end_time)} · ${SM.esc(next.room || cls(next.class_id).room || (next.online_link || cls(next.class_id).online_link ? "Online" : "—"))} · ${cntActive(next.class_id)} học viên</div>
         ${!checkins[next.id] && next.status !== "cancelled" ? `<a class="btn" href="#checkin?s=${next.id}" style="margin-top:.6rem;display:inline-block;">✅ Check-in buổi này</a>` : ""}</div>` : ""}
       ${!list.length ? `<div class="card placeholder"><div class="big">🌤️</div><p>Hôm nay bạn không có buổi dạy nào.</p></div>`
@@ -110,7 +110,7 @@ window.Me = (function () {
     box.innerHTML = tabsHtml() + (!mine.length ? `<div class="card placeholder"><div class="big">🏫</div><p>Bạn chưa được phân công lớp nào.</p></div>`
       : `<div class="sm-table-wrap"><table class="sm-table"><thead><tr><th>Lớp</th><th>Môn</th><th>HV</th><th>Phòng</th><th>Thời gian</th><th></th></tr></thead><tbody>
         ${mine.map(c => `<tr>
-          <td data-th="Lớp"><b>${SM.esc(c.name)}</b></td><td data-th="Môn">${SM.esc(c.subject || "—")}</td>
+          <td data-th="Lớp">${SM.classDot(c.color)}<b>${SM.esc(c.name)}</b></td><td data-th="Môn">${SM.esc(c.subject || "—")}</td>
           <td data-th="HV">${cntActive(c.id)}${c.max_students != null ? "/" + c.max_students : ""}</td>
           <td data-th="Phòng">${SM.esc(c.room || (c.online_link ? "Online" : "—"))}</td>
           <td data-th="Thời gian">${c.start_date ? SM.dmy(c.start_date) : "—"}${c.end_date ? " → " + SM.dmy(c.end_date) : ""}</td>

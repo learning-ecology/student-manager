@@ -118,7 +118,7 @@ window.Ops = (function () {
       const n = activeCounts[s.class_id] || 0;
       return `<tr>
         <td data-th="Giờ"><b>${hm(s.start_time)}–${hm(s.end_time)}</b></td>
-        <td data-th="Lớp"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${SM.classTint(cls(s.class_id).color).solid};margin-right:.4rem;vertical-align:middle;"></span><b>${SM.esc(cName(s.class_id))}</b>${s.type !== "regular" ? ` <span class="muted">(${s.type === "makeup" ? "bù" : "thêm"})</span>` : ""}</td>
+        <td data-th="Lớp">${SM.classDot(cls(s.class_id).color)}<b>${SM.esc(cName(s.class_id))}</b>${s.type !== "regular" ? ` <span class="muted">(${s.type === "makeup" ? "bù" : "thêm"})</span>` : ""}</td>
         <td data-th="HV">${n}</td>
         <td data-th="Phòng">${SM.esc(s.room || cls(s.class_id).room || (s.online_link || cls(s.class_id).online_link ? "Online" : "—"))}</td>
         <td data-th="Trạng thái">${sc}</td>
@@ -149,7 +149,7 @@ window.Ops = (function () {
       const s = liveStatus(c), st2 = sessionStat(c.id), n = activeCounts[c.id] || 0;
       const cap = c.max_students;
       return `<tr>
-        <td data-th="Lớp"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${SM.classTint(c.color).solid};margin-right:.4rem;vertical-align:middle;"></span><b>${SM.esc(c.name)}</b>${c.subject ? `<br><span class="muted" style="font-size:.8rem">${SM.esc(c.subject)}</span>` : ""}</td>
+        <td data-th="Lớp">${SM.classDot(c.color)}<b>${SM.esc(c.name)}</b>${c.subject ? `<br><span class="muted" style="font-size:.8rem">${SM.esc(c.subject)}</span>` : ""}</td>
         <td data-th="Trạng thái"><span class="badge ${s.cls}">${s.label}</span></td>
         <td data-th="Giáo viên">${c.teacher_id ? SM.esc(tName(c.teacher_id)) : `<span class="badge warn">chưa gán</span>`}</td>
         <td data-th="HV">${n}${cap != null ? "/" + cap : ""}</td>

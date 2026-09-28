@@ -6,7 +6,7 @@
   <title>Quản lý học viên</title>
   <link rel="preconnect" href="https://zrmgunriwvcjppjykngk.supabase.co" crossorigin>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-  <link rel="stylesheet" href="sm.css?v=47">
+  <link rel="stylesheet" href="sm.css?v=48">
   <script>try{if(localStorage.getItem("sm_theme")==="dark")document.documentElement.setAttribute("data-theme","dark");}catch(e){}</script>
 </head>
 <body>
@@ -55,24 +55,24 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=47"></script>
-  <script src="sm-lib.js?v=47"></script>
-  <script src="sm-students.js?v=47"></script>
-  <script src="sm-classes.js?v=47"></script>
-  <script src="sm-schedule.js?v=47"></script>
-  <script src="sm-teaching.js?v=47"></script>
-  <script src="sm-payroll.js?v=47"></script>
-  <script src="sm-checkin.js?v=47"></script>
-  <script src="sm-teacher.js?v=47"></script>
-  <script src="sm-tour.js?v=47"></script>
-  <script src="sm-attendance.js?v=47"></script>
-  <script src="sm-tuition.js?v=47"></script>
-  <script src="sm-payments.js?v=47"></script>
-  <script src="sm-dashboard.js?v=47"></script>
-  <script src="sm-reports.js?v=47"></script>
-  <script src="sm-audit.js?v=47"></script>
-  <script src="sm-tenants.js?v=47"></script>
-  <script src="sm-handbook.js?v=47"></script>
+  <script src="config.js?v=48"></script>
+  <script src="sm-lib.js?v=48"></script>
+  <script src="sm-students.js?v=48"></script>
+  <script src="sm-classes.js?v=48"></script>
+  <script src="sm-schedule.js?v=48"></script>
+  <script src="sm-teaching.js?v=48"></script>
+  <script src="sm-payroll.js?v=48"></script>
+  <script src="sm-checkin.js?v=48"></script>
+  <script src="sm-teacher.js?v=48"></script>
+  <script src="sm-tour.js?v=48"></script>
+  <script src="sm-attendance.js?v=48"></script>
+  <script src="sm-tuition.js?v=48"></script>
+  <script src="sm-payments.js?v=48"></script>
+  <script src="sm-dashboard.js?v=48"></script>
+  <script src="sm-reports.js?v=48"></script>
+  <script src="sm-audit.js?v=48"></script>
+  <script src="sm-tenants.js?v=48"></script>
+  <script src="sm-handbook.js?v=48"></script>
   <script>
     const $ = id => document.getElementById(id);
     let ME = null, SETTINGS = null, TENANT = null;   // TENANT: {account_type, features} — quyết định module hiển thị
@@ -146,25 +146,77 @@
       $("st-tour").onclick = () => Tour.startDefault(TENANT, ME.profile.role);
       if (owner && $("ta-list")) {
         loadTeacherAccounts();
-        $("ta-add").onclick = async () => {
-          const name = window.prompt("Tên giáo viên:");
-          if (!name || !name.trim()) return;
-          const { error } = await sb.from("teachers").insert({ full_name: name.trim() });
-          if (error) return SM.toast("Không thêm được: " + error.message, "err");
-          SM.invalidate("teachers"); SM.toast("✓ Đã thêm giáo viên", "ok"); loadTeacherAccounts();
-        };
+        $("ta-add").onclick = () => teacherForm(null, loadTeacherAccounts);
       }
+    }
+
+    // Hồ sơ giáo viên: họ tên, SĐT, email, môn dạy (Qualified Subjects).
+    function teacherForm(t, onDone) {
+      t = t || {}; const isNew = !t.id; const g = k => t[k] == null ? "" : t[k];
+      const ov = document.createElement("div"); ov.className = "sm-ov";
+      ov.innerHTML = `<div class="sm-modal" style="max-width:460px;">
+        <div class="mh"><h3>${isNew ? "➕ Thêm giáo viên" : "✏️ Sửa hồ sơ giáo viên"}</h3><button class="btn ghost" data-x="close">✕</button></div>
+        <div class="mb">
+          <div class="field"><label>Họ tên *</label><input id="tf-name" value="${SM.esc(g("full_name"))}" placeholder="Nguyễn Văn A"></div>
+          <div class="grid2">
+            <div class="field"><label>Số điện thoại</label><input id="tf-phone" type="tel" inputmode="numeric" autocomplete="tel" value="${SM.esc(g("phone"))}"></div>
+            <div class="field"><label>Email</label><input id="tf-email" type="email" value="${SM.esc(g("email"))}"></div>
+          </div>
+          <div class="field"><label>Môn dạy <span class="muted" style="font-weight:400">— phân tách bằng dấu phẩy</span></label><input id="tf-subjects" value="${SM.esc(g("subjects"))}" placeholder="Toán, Lý, HSK…"></div>
+          <p class="muted" style="font-size:.8rem;margin:.2rem 0 0;">Định mức lương đặt ở <b>Lương giáo viên → Định mức</b>. Liên kết tài khoản đăng nhập ở danh sách bên dưới.</p>
+        </div>
+        <div class="mf"><button class="btn ghost" data-x="close">Hủy</button><button class="btn" id="tf-save">💾 Lưu</button>
+          <span class="msg" id="tf-msg" style="align-self:center"></span></div></div>`;
+      document.body.appendChild(ov);
+      ov.addEventListener("click", e => { if (e.target === ov || e.target.dataset.x === "close") ov.remove(); });
+      ov.querySelector("#tf-save").onclick = async () => {
+        const say = (m, e) => { const el = ov.querySelector("#tf-msg"); el.textContent = m; el.className = "msg" + (e ? " err" : ""); };
+        const name = ov.querySelector("#tf-name").value.trim(); if (!name) return say("Thiếu họ tên.", true);
+        const subjects = ov.querySelector("#tf-subjects").value.split(",").map(s => s.trim()).filter(Boolean).join(", ");
+        const row = { full_name: name, phone: ov.querySelector("#tf-phone").value.trim(), email: ov.querySelector("#tf-email").value.trim(), subjects };
+        ov.querySelector("#tf-save").disabled = true;
+        const res = isNew ? await sb.from("teachers").insert(row) : await sb.from("teachers").update(row).eq("id", t.id);
+        if (res.error) { ov.querySelector("#tf-save").disabled = false; return say("Không lưu được: " + res.error.message, true); }
+        ov.remove(); SM.invalidate("teachers"); SM.toast(isNew ? "✓ Đã thêm giáo viên" : "✓ Đã lưu hồ sơ", "ok"); if (onDone) onDone();
+      };
     }
 
     async function loadTeacherAccounts() {
       const wrap = $("ta-list"); if (!wrap) return;
-      const { data: ts, error } = await sb.from("teachers").select("id,full_name,user_id").is("archived_at", null).order("full_name");
+      const today = SM.todayISO();
+      const nowHM = new Date().toLocaleTimeString("en-GB", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit" });
+      const [{ data: ts, error }, { data: sess }] = await Promise.all([
+        sb.from("teachers").select("id,full_name,user_id,phone,email,subjects").is("archived_at", null).order("full_name"),
+        sb.from("sessions").select("teacher_id,start_time,end_time").eq("date", today).neq("status", "cancelled")
+      ]);
       if (error) { wrap.innerHTML = `<p class="muted">Không tải được danh sách: ${SM.esc(error.message)}</p>`; return; }
-      if (!ts || !ts.length) { wrap.innerHTML = `<p class="muted">Chưa có giáo viên nào. Thêm giáo viên khi tạo lớp.</p>`; return; }
-      wrap.innerHTML = ts.map(t => `<div style="display:flex;align-items:center;gap:.6rem;padding:.45rem 0;border-bottom:1px solid var(--line);">
-        <span style="flex:1;"><b>${SM.esc(t.full_name)}</b> ${t.user_id ? '<span class="badge ok">đã liên kết</span>' : '<span class="badge mute">chưa liên kết</span>'}</span>
-        ${t.user_id ? `<button class="btn ghost" data-unlink="${t.id}" style="color:var(--danger);border-color:var(--danger);padding:.3rem .6rem;">Gỡ</button>`
-          : `<button class="btn ghost" data-link="${t.id}" style="padding:.3rem .6rem;">🔗 Liên kết</button>`}</div>`).join("");
+      if (!ts || !ts.length) { wrap.innerHTML = `<p class="muted">Chưa có giáo viên nào. Bấm ➕ Thêm giáo viên.</p>`; return; }
+      const byT = {}; (sess || []).forEach(s => { if (s.teacher_id) (byT[s.teacher_id] = byT[s.teacher_id] || []).push(s); });
+      const hm = t => (t || "").slice(0, 5);
+      const availBadge = tid => {
+        const live = (byT[tid] || []).find(s => hm(s.start_time) <= nowHM && nowHM <= hm(s.end_time));
+        return live ? `<span class="badge bad" title="Đang có buổi dạy">🔴 Đang dạy · đến ${hm(live.end_time)}</span>` : `<span class="badge ok">🟢 Rảnh</span>`;
+      };
+      wrap.innerHTML = ts.map(t => {
+        const subs = (t.subjects || "").split(",").map(x => x.trim()).filter(Boolean);
+        const n = (byT[t.id] || []).length;
+        return `<div style="padding:.55rem 0;border-bottom:1px solid var(--line);">
+          <div style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;">
+            <b style="flex:1;min-width:120px;">${SM.esc(t.full_name)}</b>
+            ${availBadge(t.id)}
+            ${t.user_id ? '<span class="badge ok">đã liên kết</span>' : '<span class="badge mute">chưa liên kết</span>'}
+          </div>
+          <div class="muted" style="font-size:.83rem;margin:.15rem 0 .35rem;">
+            ${t.phone ? "📞 " + SM.esc(t.phone) : ""}${t.phone && t.email ? " · " : ""}${t.email ? "✉️ " + SM.esc(t.email) : ""}${n ? (t.phone || t.email ? " · " : "") + n + " buổi hôm nay" : ""}
+            ${subs.length ? "<br>" + subs.map(s => `<span class="badge mute" style="margin:.15rem .2rem .1rem 0;">${SM.esc(s)}</span>`).join("") : ""}
+          </div>
+          <div class="row-actions">
+            <button class="btn ghost" data-tedit="${t.id}" style="padding:.3rem .6rem;">Sửa hồ sơ</button>
+            ${t.user_id ? `<button class="btn ghost" data-unlink="${t.id}" style="color:var(--danger);border-color:var(--danger);padding:.3rem .6rem;">Gỡ tài khoản</button>`
+              : `<button class="btn ghost" data-link="${t.id}" style="padding:.3rem .6rem;">🔗 Liên kết đăng nhập</button>`}
+          </div></div>`;
+      }).join("");
+      wrap.querySelectorAll("[data-tedit]").forEach(b => b.onclick = () => teacherForm(ts.find(x => x.id === b.dataset.tedit), loadTeacherAccounts));
       wrap.querySelectorAll("[data-link]").forEach(b => b.onclick = async () => {
         const email = window.prompt("Email đăng nhập của giáo viên (đã tạo trong Supabase → Authentication):");
         if (!email || !email.trim()) return;

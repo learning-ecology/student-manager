@@ -6,7 +6,7 @@
   <title>Quản lý học viên</title>
   <link rel="preconnect" href="https://zrmgunriwvcjppjykngk.supabase.co" crossorigin>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-  <link rel="stylesheet" href="sm.css?v=42">
+  <link rel="stylesheet" href="sm.css?v=43">
   <script>try{if(localStorage.getItem("sm_theme")==="dark")document.documentElement.setAttribute("data-theme","dark");}catch(e){}</script>
 </head>
 <body>
@@ -49,27 +49,28 @@
         <div class="placeholder"><span class="spinner"></span></div>
       </main>
     </div>
+    <nav class="sm-bottomnav" id="bottomNav" hidden></nav>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=42"></script>
-  <script src="sm-lib.js?v=42"></script>
-  <script src="sm-students.js?v=42"></script>
-  <script src="sm-classes.js?v=42"></script>
-  <script src="sm-schedule.js?v=42"></script>
-  <script src="sm-teaching.js?v=42"></script>
-  <script src="sm-payroll.js?v=42"></script>
-  <script src="sm-checkin.js?v=42"></script>
-  <script src="sm-teacher.js?v=42"></script>
-  <script src="sm-tour.js?v=42"></script>
-  <script src="sm-attendance.js?v=42"></script>
-  <script src="sm-tuition.js?v=42"></script>
-  <script src="sm-payments.js?v=42"></script>
-  <script src="sm-dashboard.js?v=42"></script>
-  <script src="sm-reports.js?v=42"></script>
-  <script src="sm-audit.js?v=42"></script>
-  <script src="sm-tenants.js?v=42"></script>
-  <script src="sm-handbook.js?v=42"></script>
+  <script src="config.js?v=43"></script>
+  <script src="sm-lib.js?v=43"></script>
+  <script src="sm-students.js?v=43"></script>
+  <script src="sm-classes.js?v=43"></script>
+  <script src="sm-schedule.js?v=43"></script>
+  <script src="sm-teaching.js?v=43"></script>
+  <script src="sm-payroll.js?v=43"></script>
+  <script src="sm-checkin.js?v=43"></script>
+  <script src="sm-teacher.js?v=43"></script>
+  <script src="sm-tour.js?v=43"></script>
+  <script src="sm-attendance.js?v=43"></script>
+  <script src="sm-tuition.js?v=43"></script>
+  <script src="sm-payments.js?v=43"></script>
+  <script src="sm-dashboard.js?v=43"></script>
+  <script src="sm-reports.js?v=43"></script>
+  <script src="sm-audit.js?v=43"></script>
+  <script src="sm-tenants.js?v=43"></script>
+  <script src="sm-handbook.js?v=43"></script>
   <script>
     const $ = id => document.getElementById(id);
     let ME = null, SETTINGS = null, TENANT = null;   // TENANT: {account_type, features} — quyết định module hiển thị
@@ -180,6 +181,23 @@
     }
 
     const TEACHER_PANES = ["me", "checkin", "handbook"];
+    // Thanh điều hướng dưới cùng (mobile) — 4-5 mục dùng nhiều nhất + "Thêm" mở ngăn kéo.
+    function buildBottomNav(isTeacher) {
+      const bn = $("bottomNav");
+      const LABEL = { me: "Của tôi", dashboard: "Tổng quan", attendance: "Điểm danh",
+        tuition: "Học phí", students: "Học viên", checkin: "Chấm công", handbook: "Hướng dẫn" };
+      const iconOf = k => (SM.MODULES.find(m => m.k === k) || {}).icon || "•";
+      let keys = isTeacher ? ["me", "checkin", "handbook"]
+                           : ["dashboard", "attendance", "tuition", "students"];
+      // chỉ giữ mục đang bật cho workspace (dashboard luôn bật)
+      keys = keys.filter(k => k === "dashboard" || k === "me" || !SM.MODULES.some(m => m.k === k) || SM.moduleEnabled(k, TENANT));
+      let html = keys.map(k => `<a href="#${k}" data-nav="${k}"><span class="ic">${iconOf(k)}</span><span class="lbl">${LABEL[k] || k}</span></a>`).join("");
+      if (!isTeacher) html += `<button type="button" class="bn-more" aria-label="Thêm"><span class="ic">☰</span><span class="lbl">Thêm</span></button>`;
+      bn.innerHTML = html;
+      bn.hidden = false;
+      bn.onclick = e => { if (e.target.closest(".bn-more")) { e.preventDefault(); openSide(); } };
+    }
+
     function route() {
       const raw = (location.hash.replace("#", "") || "dashboard");
       let pane = raw.split("?")[0];
@@ -190,6 +208,12 @@
       // module bị tắt theo loại tài khoản / gói → về Tổng quan
       else if (ME && ME.profile.role !== "teacher" && SM.MODULES.some(m => m.k === pane) && !SM.moduleEnabled(pane, TENANT)) pane = "dashboard";
       document.querySelectorAll("#nav a").forEach(a => a.classList.toggle("on", a.dataset.nav === pane));
+      const bn = $("bottomNav");
+      if (bn) {
+        let matched = false;
+        bn.querySelectorAll("a").forEach(a => { const on = a.dataset.nav === pane; a.classList.toggle("on", on); if (on) matched = true; });
+        const more = bn.querySelector(".bn-more"); if (more) more.classList.toggle("on", !matched);
+      }
       closeSide();
       if (pane === "me") return Me.render($("content"), ME);
       if (pane === "checkin") {
@@ -264,6 +288,7 @@
           document.getElementById("impExit").addEventListener("click", async () => { sessionStorage.removeItem("sm_impersonate"); await sb.auth.signOut(); location.href = "login.html"; });
         }
       } catch (e) {}
+      buildBottomNav(isTeacher);
       $("app").hidden = false;
       route();
       // Bảo trì lịch: mỗi tháng tự sinh buổi cho lớp mở (chỉ nhân viên có quyền). Chạy nền, không chặn UI.

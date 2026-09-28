@@ -114,6 +114,27 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--accent-soft);bor
   .sm-dialog{position:relative;padding-top:1.6rem;padding-bottom:calc(1.4rem + env(safe-area-inset-bottom));}
 }
 
+/* ===== Mobile ergonomics — Tranche 2: bottom navigation + trimmed top bar ===== */
+.sm-bottomnav{display:none;}
+@media(max-width:768px){
+  .sm-bottomnav{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:30;
+    background:color-mix(in srgb,var(--paper) 92%,transparent);backdrop-filter:blur(10px);
+    border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom);}
+  .sm-bottomnav a,.sm-bottomnav .bn-more{flex:1;min-width:0;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:2px;min-height:52px;padding:.35rem .15rem .45rem;
+    background:none;border:0;text-decoration:none;color:var(--muted);font-size:.66rem;font-weight:700;}
+  .sm-bottomnav .ic{font-size:1.2rem;line-height:1;}
+  .sm-bottomnav .lbl{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .sm-bottomnav a.on,.sm-bottomnav .bn-more.on{color:var(--accent);}
+  /* reclaim the top bar: hide the dead "coming soon" search, right-align controls */
+  .sm-top .search{display:none;}
+  .sm-top #whoName{display:none;}          /* name lives in the drawer / Của tôi — keep header to one row */
+  .sm-top #themeBtn{margin-left:auto;}
+  /* keep content clear of the fixed bottom nav */
+  .sm-content{padding-bottom:calc(64px + env(safe-area-inset-bottom));}
+  #sm-toasts{bottom:calc(64px + env(safe-area-inset-bottom));}
+}
+
 /* tables */
 .toolbar{display:flex;gap:.6rem;flex-wrap:wrap;align-items:flex-end;margin-bottom:.9rem;}
 .toolbar .field{margin:0;}

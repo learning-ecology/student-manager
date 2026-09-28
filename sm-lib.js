@@ -103,6 +103,7 @@ const SM = (function () {
     { k: "dashboard", l: "Tổng quan", icon: "📊", always: true },
     { k: "students", l: "Học viên", icon: "👤" },
     { k: "classes", l: "Lớp học", icon: "🏫" },
+    { k: "cohorts", l: "Khóa học", icon: "🎓", centerOnly: true },
     { k: "schedule", l: "Lịch học", icon: "🗓️" },
     { k: "ops", l: "Điều hành", icon: "🧭", centerOnly: true },
     { k: "attendance", l: "Điểm danh", icon: "✅" },

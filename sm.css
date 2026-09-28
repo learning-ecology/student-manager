@@ -397,3 +397,33 @@ body.printing .receipt-print{position:fixed;left:0;top:0;width:100%;padding:2rem
 .auth-card p.sub{text-align:center;color:var(--muted);margin:0 0 1.3rem;}
 .msg{font-size:.86rem;min-height:1.1em;margin:.4rem 0 0;}
 .msg.err{color:var(--danger);}
+
+/* ---- Khóa học (Cohort) — lưới thời khóa biểu ---- */
+.cohort-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:.4rem;}
+.cohort-col{min-width:0;}
+.cohort-dh{background:var(--accent-soft);border:1px solid var(--line);border-radius:8px;padding:.35rem;text-align:center;font-weight:700;font-size:.82rem;margin-bottom:.35rem;color:var(--accent);}
+.cohort-blk{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:8px;padding:.35rem .45rem;font-size:.82rem;margin-bottom:.35rem;line-height:1.32;}
+@media(max-width:768px){.cohort-grid{grid-template-columns:1fr;}.cohort-dh{text-align:left;}}
+
+/* Cohort schedule PDF (A4 ngang) */
+#cohort-print{display:none;}
+@media print{
+  body.printing-cohort *{visibility:hidden !important;}
+  body.printing-cohort #cohort-print, body.printing-cohort #cohort-print *{visibility:visible !important;}
+  body.printing-cohort #cohort-print{display:block !important;position:fixed;left:0;top:0;width:100%;padding:0;background:#fff;}
+  body.printing-cohort .sm-ov{position:static;background:none;padding:0;}
+  @page{size:A4 landscape;margin:8mm;}
+}
+.cprint{font-family:var(--sans);color:#111;}
+.cprint .pcenter{font-size:11px;color:#666;letter-spacing:.03em;text-transform:uppercase;}
+.cprint .ph h1{font-family:var(--serif);margin:2px 0 0;font-size:21px;}
+.cprint .psub{color:#555;font-size:12px;margin:2px 0 10px;}
+.cprint .pt{width:100%;border-collapse:collapse;table-layout:fixed;}
+.cprint .pt th{background:#eef2fa;border:1px solid #c7d2ea;padding:5px 6px;font-size:11px;text-align:left;color:#1a2740;}
+.cprint .pt td{border:1px solid #c7d2ea;padding:4px;vertical-align:top;font-size:10.5px;width:14.28%;}
+.cprint .pb{border-left:3px solid #2456a6;padding:2px 5px;margin:0 0 4px;background:#f6f9fd;border-radius:3px;}
+.cprint .pb:last-child{margin-bottom:0;}
+.cprint .pm{color:#555;font-size:9.5px;}
+.cprint .pe{color:#bbb;text-align:center;padding:6px 0;}
+.cprint .pi{margin-top:11px;font-size:12px;}
+.cprint .pf{margin-top:8px;color:#999;font-size:10px;text-align:right;}

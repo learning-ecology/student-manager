@@ -6,7 +6,7 @@
   <title>Quản lý học viên</title>
   <link rel="preconnect" href="https://zrmgunriwvcjppjykngk.supabase.co" crossorigin>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-  <link rel="stylesheet" href="sm.css?v=46">
+  <link rel="stylesheet" href="sm.css?v=47">
   <script>try{if(localStorage.getItem("sm_theme")==="dark")document.documentElement.setAttribute("data-theme","dark");}catch(e){}</script>
 </head>
 <body>
@@ -40,10 +40,11 @@
     <div class="sm-main">
       <div class="sm-top">
         <button class="sm-burger" id="burger" aria-label="Menu">☰</button>
-        <div class="search"><input id="globalSearch" placeholder="🔎 Tìm kiếm (sắp có)…" disabled></div>
+        <div class="search"><input id="globalSearch" placeholder="🔎 Tìm học viên, lớp…" autocomplete="off">
+          <div class="search-results" id="searchResults" hidden></div></div>
         <button class="btn ghost" id="themeBtn" title="Sáng/tối" style="padding:.4rem .6rem;">🌙</button>
         <div class="who"><span id="whoName" class="muted"></span>
-          <button class="btn ghost" id="logout" style="padding:.4rem .7rem;">Đăng xuất</button></div>
+          <button class="btn ghost" id="logout" style="padding:.4rem .7rem;">🚪 <span class="lbl">Đăng xuất</span></button></div>
       </div>
       <main class="sm-content" id="content">
         <div class="placeholder"><span class="spinner"></span></div>
@@ -54,24 +55,24 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=46"></script>
-  <script src="sm-lib.js?v=46"></script>
-  <script src="sm-students.js?v=46"></script>
-  <script src="sm-classes.js?v=46"></script>
-  <script src="sm-schedule.js?v=46"></script>
-  <script src="sm-teaching.js?v=46"></script>
-  <script src="sm-payroll.js?v=46"></script>
-  <script src="sm-checkin.js?v=46"></script>
-  <script src="sm-teacher.js?v=46"></script>
-  <script src="sm-tour.js?v=46"></script>
-  <script src="sm-attendance.js?v=46"></script>
-  <script src="sm-tuition.js?v=46"></script>
-  <script src="sm-payments.js?v=46"></script>
-  <script src="sm-dashboard.js?v=46"></script>
-  <script src="sm-reports.js?v=46"></script>
-  <script src="sm-audit.js?v=46"></script>
-  <script src="sm-tenants.js?v=46"></script>
-  <script src="sm-handbook.js?v=46"></script>
+  <script src="config.js?v=47"></script>
+  <script src="sm-lib.js?v=47"></script>
+  <script src="sm-students.js?v=47"></script>
+  <script src="sm-classes.js?v=47"></script>
+  <script src="sm-schedule.js?v=47"></script>
+  <script src="sm-teaching.js?v=47"></script>
+  <script src="sm-payroll.js?v=47"></script>
+  <script src="sm-checkin.js?v=47"></script>
+  <script src="sm-teacher.js?v=47"></script>
+  <script src="sm-tour.js?v=47"></script>
+  <script src="sm-attendance.js?v=47"></script>
+  <script src="sm-tuition.js?v=47"></script>
+  <script src="sm-payments.js?v=47"></script>
+  <script src="sm-dashboard.js?v=47"></script>
+  <script src="sm-reports.js?v=47"></script>
+  <script src="sm-audit.js?v=47"></script>
+  <script src="sm-tenants.js?v=47"></script>
+  <script src="sm-handbook.js?v=47"></script>
   <script>
     const $ = id => document.getElementById(id);
     let ME = null, SETTINGS = null, TENANT = null;   // TENANT: {account_type, features} — quyết định module hiển thị
@@ -213,11 +214,54 @@
       fab.onclick = () => { const b = $("content").querySelector(FAB_SEL[pane]); if (b) b.click(); };
     }
 
+    // Tìm kiếm toàn cục: học viên + lớp; chọn kết quả → nhảy tới đúng nơi.
+    function wireSearch() {
+      const inp = $("globalSearch"), rbox = $("searchResults");
+      if (!inp || !rbox) return;
+      let deb, seq = 0;
+      const hide = () => { rbox.hidden = true; };
+      const clear = () => { inp.value = ""; rbox.innerHTML = ""; hide(); };
+      inp.addEventListener("input", () => {
+        clearTimeout(deb);
+        const q = inp.value.trim();
+        if (!q) { rbox.innerHTML = ""; return hide(); }
+        deb = setTimeout(() => runSearch(q), 250);
+      });
+      inp.addEventListener("focus", () => { if (rbox.innerHTML) rbox.hidden = false; });
+      inp.addEventListener("keydown", e => { if (e.key === "Escape") { clear(); inp.blur(); } });
+      document.addEventListener("click", e => { if (!e.target.closest(".search")) hide(); });
+      rbox.addEventListener("click", e => { if (e.target.closest(".sr-item")) { hide(); inp.value = ""; rbox.innerHTML = ""; inp.blur(); } });
+
+      async function runSearch(q) {
+        const my = ++seq, like = q.replace(/[%,]/g, " ");
+        let students = [], classes = [];
+        try {
+          const [s, c] = await Promise.all([
+            sb.from("students").select("id,code,full_name,phone").is("archived_at", null)
+              .or(`full_name.ilike.%${like}%,code.ilike.%${like}%,phone.ilike.%${like}%,guardian_phone.ilike.%${like}%`).limit(6),
+            sb.from("classes").select("id,name,subject").is("archived_at", null)
+              .or(`name.ilike.%${like}%,subject.ilike.%${like}%`).limit(6)
+          ]);
+          students = s.data || []; classes = c.data || [];
+        } catch (e) {}
+        if (my !== seq) return;   // bỏ kết quả cũ
+        if (!students.length && !classes.length) {
+          rbox.innerHTML = `<div class="sr-empty">Không có kết quả cho “${SM.esc(q)}”.</div>`; rbox.hidden = false; return;
+        }
+        let html = "";
+        if (students.length) html += `<div class="sr-grp">Học viên</div>` + students.map(s =>
+          `<a class="sr-item" href="#students?q=${encodeURIComponent(s.code || s.full_name)}"><span class="sr-ic">👤</span><span class="sr-main"><b>${SM.esc(s.full_name)}</b><span class="sr-sub">${SM.esc(s.code || "")}${s.phone ? " · " + SM.esc(s.phone) : ""}</span></span></a>`).join("");
+        if (classes.length) html += `<div class="sr-grp">Lớp học</div>` + classes.map(c =>
+          `<a class="sr-item" href="#classes?class=${c.id}"><span class="sr-ic">🏫</span><span class="sr-main"><b>${SM.esc(c.name)}</b>${c.subject ? `<span class="sr-sub">${SM.esc(c.subject)}</span>` : ""}</span></a>`).join("");
+        rbox.innerHTML = html; rbox.hidden = false;
+      }
+    }
+
     function route() {
       const raw = (location.hash.replace("#", "") || "dashboard");
       let pane = raw.split("?")[0];
       const qp = new URLSearchParams(raw.split("?")[1] || "");
-      const opts = { classId: qp.get("class") || "", tab: qp.get("tab") || "" };
+      const opts = { classId: qp.get("class") || "", tab: qp.get("tab") || "", q: qp.get("q") || "" };
       // giáo viên: chỉ vào được cổng của mình + trang check-in + hướng dẫn
       if (ME && ME.profile.role === "teacher" && !TEACHER_PANES.includes(pane)) pane = "me";
       // module bị tắt theo loại tài khoản / gói → về Tổng quan
@@ -238,8 +282,8 @@
       }
       if (pane === "settings") return renderSettings();
       if (pane === "dashboard") return renderDashboard();
-      if (pane === "students") return Students.render($("content"), ME);
-      if (pane === "classes") return Classes.render($("content"), ME);
+      if (pane === "students") return Students.render($("content"), ME, opts);
+      if (pane === "classes") return Classes.render($("content"), ME, opts);
       if (pane === "schedule") return Schedule.render($("content"), ME, opts);
       if (pane === "ops") return Ops.render($("content"), ME);
       if (pane === "attendance") return Attendance.render($("content"), ME, opts);
@@ -266,6 +310,7 @@
     });
     $("logout").addEventListener("click", async () => { await sb.auth.signOut(); location.href = "login.html"; });
     window.addEventListener("hashchange", route);
+    wireSearch();
     // Accordion thẻ dữ liệu (mobile): chạm vào thẻ để mở/thu gọn chi tiết phụ.
     document.addEventListener("click", e => {
       const tr = e.target.closest(".sm-table.collapsible tbody tr");
@@ -290,6 +335,7 @@
       const isTeacher = ME.profile.role === "teacher";
       if (isTeacher) {
         $("navMe").hidden = false;
+        const sb0 = document.querySelector(".sm-top .search"); if (sb0) sb0.hidden = true;   // GV không vào Học viên/Lớp học
         document.querySelectorAll("#nav a").forEach(a => { if (!["me", "handbook"].includes(a.dataset.nav)) a.hidden = true; });
         const cur = (location.hash.replace("#", "").split("?")[0]);
         if (!TEACHER_PANES.includes(cur)) location.hash = "#me";

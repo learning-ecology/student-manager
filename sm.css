@@ -46,8 +46,21 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--accent-soft);bor
 .sm-main{min-width:0;display:flex;flex-direction:column;}
 .sm-top{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--paper) 88%,transparent);backdrop-filter:blur(8px);
   border-bottom:1px solid var(--line);display:flex;align-items:center;gap:1rem;padding:.7rem 1.2rem;}
-.sm-top .search{flex:1;max-width:440px;}
+.sm-top .search{flex:1;max-width:440px;position:relative;}
 .sm-top .who{display:flex;align-items:center;gap:.5rem;font-size:.9rem;}
+/* global search dropdown */
+.search-results{position:absolute;top:calc(100% + 6px);left:0;right:0;background:var(--card);
+  border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);z-index:40;
+  max-height:min(70vh,420px);overflow:auto;padding:.3rem;}
+.search-results[hidden]{display:none;}
+.sr-grp{font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;padding:.45rem .6rem .2rem;}
+.sr-item{display:flex;align-items:center;gap:.6rem;padding:.5rem .6rem;border-radius:9px;text-decoration:none;color:inherit;}
+.sr-item:hover{background:var(--accent-soft);}
+.sr-ic{font-size:1.1rem;flex:none;}
+.sr-main{display:flex;flex-direction:column;min-width:0;}
+.sr-main b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.sr-sub{font-size:.8rem;color:var(--muted);}
+.sr-empty{padding:.8rem .7rem;color:var(--muted);font-size:.9rem;}
 .sm-content{padding:1.2rem;max-width:1200px;width:100%;margin:0 auto;}
 .sm-content h1{font-size:1.5rem;margin:.2rem 0 1rem;}
 .badge{display:inline-block;padding:.12rem .55rem;border-radius:999px;font-size:.75rem;font-weight:700;}
@@ -126,10 +139,11 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--accent-soft);bor
   .sm-bottomnav .ic{font-size:1.2rem;line-height:1;}
   .sm-bottomnav .lbl{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .sm-bottomnav a.on,.sm-bottomnav .bn-more.on{color:var(--accent);}
-  /* reclaim the top bar: hide the dead "coming soon" search, right-align controls */
-  .sm-top .search{display:none;}
-  .sm-top #whoName{display:none;}          /* name lives in the drawer / Của tôi — keep header to one row */
-  .sm-top #themeBtn{margin-left:auto;}
+  /* keep the header to one row: hide the user name and shrink logout to an icon,
+     leaving the global search room to work */
+  .sm-top{gap:.5rem;}
+  .sm-top #whoName{display:none;}          /* name lives in the drawer / Của tôi */
+  .sm-top #logout .lbl{display:none;}      /* logout becomes icon-only (🚪) */
   /* keep content clear of the fixed bottom nav */
   .sm-content{padding-bottom:calc(64px + env(safe-area-inset-bottom));}
   #sm-toasts{bottom:calc(64px + env(safe-area-inset-bottom));}

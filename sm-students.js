@@ -765,6 +765,8 @@ window.Students = (function () {
   return {
     _import: { parseDelimited, parseAndValidate, mapGender, normPhone, normName },   // để kiểm thử
     _buildXlsx: buildXlsx, _readXlsx: readXlsx, _sheetToRows: sheetToRows,
-    render(el, me) { ME = me; box = el; load(); }
+    render(el, me, opts) { ME = me; box = el;
+      if (opts && opts.q) { st.q = opts.q; st.status = ""; st.archived = false; st.page = 1; }   // mở sẵn từ tìm kiếm toàn cục
+      load(); }
   };
 })();

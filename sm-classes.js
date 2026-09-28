@@ -871,10 +871,12 @@ window.Classes = (function () {
 
   return {
     ensureMonthlySessions,
-    async render(el, me) {
+    async render(el, me, opts) {
       ME = me; box = el; view = "list"; sel.clear();
       box.innerHTML = `<div class="card placeholder"><span class="spinner"></span></div>`;
-      await loadTeachers(); await loadClasses();
+      await loadTeachers();
+      if (opts && opts.classId) { showFormer = false; return loadDetail(opts.classId); }   // mở thẳng trang chi tiết (từ tìm kiếm)
+      await loadClasses();
     }
   };
 })();

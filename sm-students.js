@@ -66,7 +66,7 @@ window.Students = (function () {
       ${busy ? `<div class="card placeholder"><span class="spinner"></span></div>`
         : total === 0 ? `<div class="card placeholder"><div class="big">🗒️</div>
             <p>${st.q || st.status ? "Không tìm thấy học viên phù hợp." : (st.archived ? "Chưa có học viên nào bị lưu trữ." : "Chưa có học viên nào. Bấm ➕ Thêm học viên để bắt đầu.")}</p></div>`
-        : `<div class="sm-table-wrap"><table class="sm-table">
+        : `<div class="sm-table-wrap"><table class="sm-table collapsible">
             <thead><tr>
               ${th("code", "Mã")}<th>Ảnh</th>${th("full_name", "Họ tên")}
               <th>SĐT</th><th>Phụ huynh</th>${th("status", "Trạng thái")}${th("enrolled_on", "Nhập học")}<th></th>
@@ -94,12 +94,12 @@ window.Students = (function () {
       : `<span class="avatar">${SM.esc(initials(s.full_name))}</span>`;
     return `<tr>
       <td data-th="Mã"><code>${SM.esc(s.code)}</code></td>
-      <td data-th="Ảnh">${av}</td>
+      <td class="sec" data-th="Ảnh">${av}</td>
       <td data-th="Họ tên"><b>${SM.esc(s.full_name)}</b>${s.dob ? `<br><span class="muted" style="font-size:.82rem">${SM.dmy(s.dob)}${s.gender ? " · " + (GENDER[s.gender] || "") : ""}</span>` : ""}</td>
-      <td data-th="SĐT">${SM.esc(s.phone || "—")}</td>
-      <td data-th="Phụ huynh">${s.guardian_name ? SM.esc(s.guardian_name) : "—"}${s.guardian_phone ? `<br><span class="muted" style="font-size:.82rem">${SM.esc(s.guardian_phone)}</span>` : ""}</td>
+      <td class="sec" data-th="SĐT">${SM.esc(s.phone || "—")}</td>
+      <td class="sec" data-th="Phụ huynh">${s.guardian_name ? SM.esc(s.guardian_name) : "—"}${s.guardian_phone ? `<br><span class="muted" style="font-size:.82rem">${SM.esc(s.guardian_phone)}</span>` : ""}</td>
       <td data-th="Trạng thái"><span class="badge ${STATUS_BADGE[s.status] || "mute"}">${STATUS[s.status] || s.status}</span></td>
-      <td data-th="Nhập học">${SM.dmy(s.enrolled_on)}</td>
+      <td class="sec" data-th="Nhập học">${SM.dmy(s.enrolled_on)}</td>
       <td class="cell-actions"><div class="row-actions">
         <button class="btn ghost" data-hist="${s.id}">Lịch sử lớp</button>
         <button class="btn ghost" data-edit="${s.id}">Sửa</button>

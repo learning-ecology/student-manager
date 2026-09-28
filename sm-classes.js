@@ -152,7 +152,7 @@ window.Classes = (function () {
       </div>
       ${busy ? `<div class="card placeholder"><span class="spinner"></span></div>`
         : totalC === 0 ? `<div class="card placeholder"><div class="big">🏫</div><p>${stL.q || stL.status ? "Không tìm thấy lớp." : (stL.archived ? "Chưa có lớp bị lưu trữ." : "Chưa có lớp nào. Bấm ➕ Thêm lớp.")}</p></div>`
-        : `<div class="sm-table-wrap"><table class="sm-table">
+        : `<div class="sm-table-wrap"><table class="sm-table collapsible">
             <thead><tr>${th("name", "Tên lớp")}<th>Môn</th><th>Giáo viên</th><th>Sĩ số</th>${th("status", "Trạng thái")}<th>Học phí</th><th></th></tr></thead>
             <tbody>${classes.map(rowHtml).join("")}</tbody></table></div>
           <div class="pager"><span>Hiển thị ${showFrom}–${showTo} / ${totalC}</span>
@@ -170,9 +170,9 @@ window.Classes = (function () {
     const n = counts[c.id] || 0, cap = c.max_students;
     return `<tr>
       <td data-th="Tên lớp">${SM.classDot(c.color)}<b>${SM.esc(c.name)}</b>${c.start_date ? `<br><span class="muted" style="font-size:.82rem">Từ ${SM.dmy(c.start_date)}${c.end_date ? " → " + SM.dmy(c.end_date) : ""}</span>` : ""}</td>
-      <td data-th="Môn">${SM.esc(c.subject || "—")}</td>
-      <td data-th="Giáo viên">${SM.esc(tName(c.teacher_id))}</td>
-      <td data-th="Sĩ số">${n}${cap != null ? " / " + cap : ""}${cap != null && n >= cap ? ' <span class="badge bad">đầy</span>' : ""}</td>
+      <td class="sec" data-th="Môn">${SM.esc(c.subject || "—")}</td>
+      <td class="sec" data-th="Giáo viên">${SM.esc(tName(c.teacher_id))}</td>
+      <td class="sec" data-th="Sĩ số">${n}${cap != null ? " / " + cap : ""}${cap != null && n >= cap ? ' <span class="badge bad">đầy</span>' : ""}</td>
       <td data-th="Trạng thái"><span class="badge ${CBADGE[c.status] || "mute"}">${CSTATUS[c.status] || c.status}</span></td>
       <td data-th="Học phí">${SM.vnd(c.tuition_amount)}<br><span class="muted" style="font-size:.8rem">${METHOD[c.tuition_method] || ""}</span></td>
       <td class="cell-actions"><div class="row-actions">

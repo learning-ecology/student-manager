@@ -276,15 +276,15 @@ window.Tuition = (function () {
     else if (!invoices.length) table = `<div class="card placeholder"><div class="big">🧾</div>
         <p>Chưa có hóa đơn nào cho ${MONTHS[st.month - 1]}/${st.year}${st.classId ? " · " + SM.esc(cName(st.classId)) : ""}.</p>
         <p class="muted">Chọn một lớp rồi bấm <b>⚡ Tính hóa đơn nháp</b> để tạo.</p></div>`;
-    else table = `<div class="sm-table-wrap"><table class="sm-table"><thead><tr>
+    else table = `<div class="sm-table-wrap"><table class="sm-table collapsible"><thead><tr>
         <th>Mã</th><th>Học viên</th><th>Lớp</th><th>Tạm tính</th><th>Giảm</th><th>Phải thu</th><th>Trạng thái</th><th></th>
       </tr></thead><tbody>
         ${invoices.map(i => `<tr>
           <td data-th="Mã"><code>${SM.esc(i.student ? i.student.code : "")}</code></td>
           <td data-th="Học viên"><b>${SM.esc(i.student ? i.student.full_name : "—")}</b></td>
-          <td data-th="Lớp">${SM.esc(i.klass ? i.klass.name : cName(i.class_id))}</td>
-          <td data-th="Tạm tính">${SM.vnd(i.subtotal)}</td>
-          <td data-th="Giảm">${i.discount_total ? "−" + SM.vnd(i.discount_total) : "—"}</td>
+          <td class="sec" data-th="Lớp">${SM.esc(i.klass ? i.klass.name : cName(i.class_id))}</td>
+          <td class="sec" data-th="Tạm tính">${SM.vnd(i.subtotal)}</td>
+          <td class="sec" data-th="Giảm">${i.discount_total ? "−" + SM.vnd(i.discount_total) : "—"}</td>
           <td data-th="Phải thu"><b>${SM.vnd(i.total)}</b></td>
           <td data-th="Trạng thái"><span class="badge ${(ISTATUS[i.status] || {}).c || "mute"}">${(ISTATUS[i.status] || {}).l || i.status}</span></td>
           <td class="cell-actions"><div class="row-actions"><button class="btn ghost" data-inv="${i.id}">Xem</button></div></td>

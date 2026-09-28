@@ -101,13 +101,13 @@ window.Payments = (function () {
     let table;
     if (busy) table = `<div class="card placeholder"><span class="spinner"></span></div>`;
     else if (!payList.length) table = `<div class="card placeholder"><div class="big">💵</div><p>Chưa có khoản thu nào trong khoảng thời gian này.</p></div>`;
-    else table = `<div class="sm-table-wrap"><table class="sm-table"><thead><tr>
+    else table = `<div class="sm-table-wrap"><table class="sm-table collapsible"><thead><tr>
         <th>Ngày</th><th>Học viên</th><th>Nội dung</th><th>Hình thức</th><th>Số tiền</th><th></th></tr></thead><tbody>
         ${payList.map(p => `<tr>
           <td data-th="Ngày">${SM.dmy(p.paid_on)}</td>
           <td data-th="Học viên"><b>${SM.esc(p.student ? p.student.full_name : "—")}</b>${p.student ? `<br><code style="font-size:.76rem">${SM.esc(p.student.code)}</code>` : ""}</td>
-          <td data-th="Nội dung">${p.invoice ? "Hóa đơn " + MONTHS[p.invoice.period_month - 1] + "/" + p.invoice.period_year : '<span class="muted">Trả trước / không gắn hóa đơn</span>'}${p.reference ? `<br><span class="muted" style="font-size:.8rem">${SM.esc(p.reference)}</span>` : ""}</td>
-          <td data-th="Hình thức">${METHOD[p.method] || p.method}</td>
+          <td class="sec" data-th="Nội dung">${p.invoice ? "Hóa đơn " + MONTHS[p.invoice.period_month - 1] + "/" + p.invoice.period_year : '<span class="muted">Trả trước / không gắn hóa đơn</span>'}${p.reference ? `<br><span class="muted" style="font-size:.8rem">${SM.esc(p.reference)}</span>` : ""}</td>
+          <td class="sec" data-th="Hình thức">${METHOD[p.method] || p.method}</td>
           <td data-th="Số tiền"><b style="color:${p.is_refund ? "var(--danger)" : "var(--good)"}">${p.is_refund ? "−" : "+"}${SM.vnd(p.amount)}</b>${p.is_refund ? '<br><span class="badge bad">Hoàn tiền</span>' : ""}</td>
           <td class="cell-actions"><div class="row-actions">
             <button class="btn ghost" data-receipt="${p.id}">🧾 Biên nhận</button>
@@ -300,13 +300,13 @@ window.Payments = (function () {
     if (!rows.length) { body.innerHTML = `<div class="card placeholder"><div class="big">📒</div><p>Chưa có công nợ. Hóa đơn được chốt ở mục Học phí sẽ xuất hiện tại đây.</p></div>`; return; }
     body.innerHTML = `
       <p class="muted" style="margin:.1rem 0 .7rem;font-size:.9rem;">Tổng còn nợ <b style="color:var(--danger)">${SM.vnd(owed)}</b>${credit ? ` · tổng dư (trả trước) <b style="color:var(--good)">${SM.vnd(credit)}</b>` : ""}</p>
-      <div class="sm-table-wrap"><table class="sm-table"><thead><tr>
+      <div class="sm-table-wrap"><table class="sm-table collapsible"><thead><tr>
         <th>Mã</th><th>Học viên</th><th>Phải thu</th><th>Đã thu</th><th>Số dư</th><th></th></tr></thead><tbody>
         ${rows.map(r => `<tr>
           <td data-th="Mã"><code>${SM.esc(r.student ? r.student.code : "")}</code></td>
           <td data-th="Học viên"><b>${SM.esc(r.student ? r.student.full_name : "—")}</b></td>
-          <td data-th="Phải thu">${SM.vnd(r.charged)}</td>
-          <td data-th="Đã thu">${SM.vnd(r.paid)}</td>
+          <td class="sec" data-th="Phải thu">${SM.vnd(r.charged)}</td>
+          <td class="sec" data-th="Đã thu">${SM.vnd(r.paid)}</td>
           <td data-th="Số dư">${r.balance > 0 ? `<b style="color:var(--danger)">Nợ ${SM.vnd(r.balance)}</b>` : r.balance < 0 ? `<b style="color:var(--good)">Dư ${SM.vnd(-r.balance)}</b>` : "—"}</td>
           <td class="cell-actions"><div class="row-actions"><button class="btn ghost" data-ledger="${r.sid}">Sổ chi tiết</button>
             <button class="btn" data-paystu="${r.sid}">Thu tiền</button></div></td></tr>`).join("")}

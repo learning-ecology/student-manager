@@ -6,7 +6,7 @@
   <title>Quản lý học viên</title>
   <link rel="preconnect" href="https://zrmgunriwvcjppjykngk.supabase.co" crossorigin>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-  <link rel="stylesheet" href="sm.css?v=39">
+  <link rel="stylesheet" href="sm.css?v=40">
   <script>try{if(localStorage.getItem("sm_theme")==="dark")document.documentElement.setAttribute("data-theme","dark");}catch(e){}</script>
 </head>
 <body>
@@ -52,24 +52,24 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=39"></script>
-  <script src="sm-lib.js?v=39"></script>
-  <script src="sm-students.js?v=39"></script>
-  <script src="sm-classes.js?v=39"></script>
-  <script src="sm-schedule.js?v=39"></script>
-  <script src="sm-teaching.js?v=39"></script>
-  <script src="sm-payroll.js?v=39"></script>
-  <script src="sm-checkin.js?v=39"></script>
-  <script src="sm-teacher.js?v=39"></script>
-  <script src="sm-tour.js?v=39"></script>
-  <script src="sm-attendance.js?v=39"></script>
-  <script src="sm-tuition.js?v=39"></script>
-  <script src="sm-payments.js?v=39"></script>
-  <script src="sm-dashboard.js?v=39"></script>
-  <script src="sm-reports.js?v=39"></script>
-  <script src="sm-audit.js?v=39"></script>
-  <script src="sm-tenants.js?v=39"></script>
-  <script src="sm-handbook.js?v=39"></script>
+  <script src="config.js?v=40"></script>
+  <script src="sm-lib.js?v=40"></script>
+  <script src="sm-students.js?v=40"></script>
+  <script src="sm-classes.js?v=40"></script>
+  <script src="sm-schedule.js?v=40"></script>
+  <script src="sm-teaching.js?v=40"></script>
+  <script src="sm-payroll.js?v=40"></script>
+  <script src="sm-checkin.js?v=40"></script>
+  <script src="sm-teacher.js?v=40"></script>
+  <script src="sm-tour.js?v=40"></script>
+  <script src="sm-attendance.js?v=40"></script>
+  <script src="sm-tuition.js?v=40"></script>
+  <script src="sm-payments.js?v=40"></script>
+  <script src="sm-dashboard.js?v=40"></script>
+  <script src="sm-reports.js?v=40"></script>
+  <script src="sm-audit.js?v=40"></script>
+  <script src="sm-tenants.js?v=40"></script>
+  <script src="sm-handbook.js?v=40"></script>
   <script>
     const $ = id => document.getElementById(id);
     let ME = null, SETTINGS = null, TENANT = null;   // TENANT: {account_type, features} — quyết định module hiển thị
@@ -183,6 +183,8 @@
     function route() {
       const raw = (location.hash.replace("#", "") || "dashboard");
       let pane = raw.split("?")[0];
+      const qp = new URLSearchParams(raw.split("?")[1] || "");
+      const opts = { classId: qp.get("class") || "", tab: qp.get("tab") || "" };
       // giáo viên: chỉ vào được cổng của mình + trang check-in + hướng dẫn
       if (ME && ME.profile.role === "teacher" && !TEACHER_PANES.includes(pane)) pane = "me";
       // module bị tắt theo loại tài khoản / gói → về Tổng quan
@@ -198,10 +200,10 @@
       if (pane === "dashboard") return renderDashboard();
       if (pane === "students") return Students.render($("content"), ME);
       if (pane === "classes") return Classes.render($("content"), ME);
-      if (pane === "schedule") return Schedule.render($("content"), ME);
+      if (pane === "schedule") return Schedule.render($("content"), ME, opts);
       if (pane === "ops") return Ops.render($("content"), ME);
-      if (pane === "attendance") return Attendance.render($("content"), ME);
-      if (pane === "tuition") return Tuition.render($("content"), ME);
+      if (pane === "attendance") return Attendance.render($("content"), ME, opts);
+      if (pane === "tuition") return Tuition.render($("content"), ME, opts);
       if (pane === "payments") return Payments.render($("content"), ME);
       if (pane === "payroll") return Payroll.render($("content"), ME);
       if (pane === "reports") return Reports.render($("content"), ME);

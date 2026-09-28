@@ -861,9 +861,14 @@ window.Tuition = (function () {
   return {
     _compute: computeInvoice,           // để kiểm thử
     _cycle: cycleFrom,
-    async render(el, me) {
+    async render(el, me, opts) {
       ME = me; box = el;
       if (!st.year) { const d = new Date(); st.year = d.getFullYear(); st.month = d.getMonth() + 1; }
+      // mở sẵn theo lớp (từ trang chi tiết lớp): xem mức phí hoặc lọc hóa đơn theo lớp
+      if (opts && opts.classId) {
+        if (opts.tab === "rates") { st.tab = "rates"; st.rateClass = opts.classId; }
+        else { st.tab = "invoices"; st.classId = opts.classId; }
+      }
       box.onclick = onClick;
       box.innerHTML = `<div class="card placeholder"><span class="spinner"></span></div>`;
       classes = await SM.refClasses();

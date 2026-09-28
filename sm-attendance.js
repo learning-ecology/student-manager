@@ -361,9 +361,14 @@ window.Attendance = (function () {
   }
 
   return {
-    async render(el, me) {
+    async render(el, me, opts) {
       ME = me; box = el; cur = null;
       if (!st.date) st.date = SM.todayISO();
+      // mở sẵn theo lớp (từ trang chi tiết lớp): mặc định xem tỉ lệ chuyên cần
+      if (opts && opts.classId) {
+        if (opts.tab === "mark") { st.tab = "mark"; st.classId = opts.classId; }
+        else { st.tab = "history"; st.histClass = opts.classId; }
+      }
       box.onclick = onClick;
       box.innerHTML = `<div class="card placeholder"><span class="spinner"></span></div>`;
       await loadStatic();

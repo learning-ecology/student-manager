@@ -9,7 +9,7 @@ window.Classes = (function () {
   let view = "list", curId = null;
   const stL = { q: "", status: "", archived: false, page: 1, per: 20, sortKey: "created_at", sortDir: "desc" };
   let classes = [], totalC = 0, teachers = [], counts = {}, busy = false;
-  let roster = [], rosterBusy = false, showFormer = false;
+  let roster = [], showFormer = false, detailData = null, detailBusy = false;
   const sel = new Set();
 
   const CSTATUS = { planned: "Sắp mở", active: "Đang học", paused: "Tạm dừng", completed: "Đã kết thúc", cancelled: "Đã hủy" };
@@ -22,6 +22,17 @@ window.Classes = (function () {
   // thứ trong tuần cho "Lịch học cố định" — weekday theo getDay() (0=CN..6=T7), hiển thị T2→CN
   const SCHED_DAYS = [{ dow: 1, lbl: "T2" }, { dow: 2, lbl: "T3" }, { dow: 3, lbl: "T4" },
                       { dow: 4, lbl: "T5" }, { dow: 5, lbl: "T6" }, { dow: 6, lbl: "T7" }, { dow: 0, lbl: "CN" }];
+
+  // --- tính chuyên cần & công nợ cho trang chi tiết (đồng bộ với Điểm danh / Thanh toán) ---
+  const ATT_PRESENT = new Set(["present", "late", "left_early", "makeup"]);       // tính là "có đi học"
+  const ATT_ABSENT = new Set(["authorised_absence", "unauthorised_absence"]);      // vào mẫu số tỉ lệ
+  const INV_FINAL = new Set(["unpaid", "partially_paid", "paid", "overdue"]);       // hóa đơn đã chốt → tính công nợ
+  const netPay = list => (list || []).reduce((a, p) => a + (p.is_refund ? -p.amount : p.amount), 0);
+  const enrolledOn = (e, date) => e.joined_on <= date && (!e.left_on || e.left_on >= date);
+  const rateBadge = r => r == null ? `<span class="muted">—</span>`
+    : `<span class="badge ${r >= 90 ? "ok" : r >= 75 ? "warn" : "bad"}">${r}%</span>`;
+  const balCell = b => b > 0 ? `<span class="badge bad">Nợ ${SM.vnd(b)}</span>`
+    : b < 0 ? `<span class="badge ok">Dư ${SM.vnd(-b)}</span>` : `<span class="badge mute">Đủ</span>`;
 
   async function loadTeachers() {
     teachers = await SM.refTeachers();
@@ -49,15 +60,72 @@ window.Classes = (function () {
     if (view === "list") paintList();
   }
 
-  async function loadRoster(id) {
-    rosterBusy = true; paintRoster();
-    const { data, error } = await sb.from("enrollments")
-      .select("*, student:students(id, code, full_name, phone, photo_url, status)")
-      .eq("class_id", id).order("status").order("joined_on");
-    rosterBusy = false;
-    roster = error ? [] : (data || []);
-    if (error) SM.toast("Lỗi tải danh sách: " + error.message, "err");
-    paintRoster();
+  // Tải TẤT CẢ dữ liệu cho trang chi tiết lớp: ghi danh + lịch tuần + buổi học +
+  // điểm danh (→ tỉ lệ chuyên cần) + hóa đơn/thanh toán (→ công nợ) theo từng học viên.
+  async function loadDetail(id) {
+    curId = id; view = "detail"; detailBusy = true; paintDetail();
+    const today = SM.todayISO();
+    const [clsR, enrR, schR, sesR] = await Promise.all([
+      sb.from("classes").select("*").eq("id", id).maybeSingle(),
+      sb.from("enrollments").select("*, student:students(id, code, full_name, phone, photo_url, status)")
+        .eq("class_id", id).order("status").order("joined_on"),
+      sb.from("class_schedules").select("weekday, start_time, end_time").eq("class_id", id),
+      sb.from("sessions").select("id, date, status, type, start_time, end_time").eq("class_id", id).order("date")
+    ]);
+    if (enrR.error) SM.toast("Lỗi tải danh sách: " + enrR.error.message, "err");
+    const cRow = clsR.data || cls(id) || {};
+    roster = enrR.error ? [] : (enrR.data || []);
+    const schedules = schR.data || [];
+    const sessions = sesR.data || [];
+    const pastSess = sessions.filter(s => s.date <= today && s.status !== "cancelled");   // buổi đã diễn ra
+    const pastIds = pastSess.map(s => s.id);
+    // điểm danh của các buổi đã diễn ra (tải theo lô để tránh URL quá dài)
+    let att = [];
+    for (let i = 0; i < pastIds.length; i += 200) {
+      const { data } = await sb.from("attendance").select("session_id, student_id, status").in("session_id", pastIds.slice(i, i + 200));
+      att = att.concat(data || []);
+    }
+    // hóa đơn của lớp + thanh toán đã phân bổ cho các hóa đơn đó
+    const { data: invData } = await sb.from("invoices").select("id, student_id, total, status, period_year, period_month").eq("class_id", id);
+    const invoices = invData || [];
+    const invIds = invoices.map(i => i.id);
+    let payments = [];
+    for (let i = 0; i < invIds.length; i += 200) {
+      const { data } = await sb.from("payments").select("student_id, amount, is_refund, invoice_id").in("invoice_id", invIds.slice(i, i + 200));
+      payments = payments.concat(data || []);
+    }
+    // gom điểm danh theo học viên → tính chuyên cần + công nợ (chỉ hóa đơn đã chốt) từng em
+    const byStuAtt = {}; att.forEach(a => { (byStuAtt[a.student_id] = byStuAtt[a.student_id] || {})[a.session_id] = a.status; });
+    const perStu = {};
+    roster.forEach(e => {
+      const sid = e.student && e.student.id; if (!sid) return;
+      const mine = pastSess.filter(se => enrolledOn(e, se.date));       // buổi mà em có ghi danh hiệu lực
+      let attended = 0, absent = 0, notRec = 0;
+      mine.forEach(se => { const v = (byStuAtt[sid] || {})[se.id]; if (!v) notRec++; else if (ATT_PRESENT.has(v)) attended++; else if (ATT_ABSENT.has(v)) absent++; });
+      const recorded = attended + absent;
+      const rate = recorded ? Math.round(attended / recorded * 100) : null;
+      const myInv = invoices.filter(iv => iv.student_id === sid && INV_FINAL.has(iv.status));
+      const myInvIds = new Set(myInv.map(iv => iv.id));
+      const charged = myInv.reduce((a, iv) => a + iv.total, 0);
+      const paid = netPay(payments.filter(p => p.invoice_id && myInvIds.has(p.invoice_id)));
+      perStu[sid] = { attended, absent, notRec, expected: mine.length, recorded, rate, balance: charged - paid };
+    });
+    // tổng hợp mức lớp
+    const upcoming = sessions.filter(s => s.date > today && s.status !== "cancelled");
+    const cancelled = sessions.filter(s => s.status === "cancelled").length;
+    const activeRates = roster.filter(e => e.status === "active")
+      .map(e => perStu[e.student && e.student.id]).filter(x => x && x.rate != null).map(x => x.rate);
+    const avgRate = activeRates.length ? Math.round(activeRates.reduce((a, b) => a + b, 0) / activeRates.length) : null;
+    const yy = +today.slice(0, 4), mm = +today.slice(5, 7);
+    const monthInv = invoices.filter(iv => iv.period_year === yy && iv.period_month === mm && INV_FINAL.has(iv.status));
+    const monthInvIds = new Set(monthInv.map(iv => iv.id));
+    const monthBilled = monthInv.reduce((a, iv) => a + iv.total, 0);
+    const monthPaid = netPay(payments.filter(p => p.invoice_id && monthInvIds.has(p.invoice_id)));
+    const outstanding = Object.values(perStu).reduce((a, x) => a + Math.max(0, x.balance), 0);
+    detailData = { cls: cRow, schedules, sessions, upcoming, held: pastSess.length, cancelled,
+      avgRate, perStu, monthBilled, monthPaid, outstanding, monthLabel: mm + "/" + yy };
+    detailBusy = false;
+    paintDetail();
   }
 
   /* ---------------- LIST ---------------- */
@@ -108,7 +176,7 @@ window.Classes = (function () {
       <td data-th="Trạng thái"><span class="badge ${CBADGE[c.status] || "mute"}">${CSTATUS[c.status] || c.status}</span></td>
       <td data-th="Học phí">${SM.vnd(c.tuition_amount)}<br><span class="muted" style="font-size:.8rem">${METHOD[c.tuition_method] || ""}</span></td>
       <td class="cell-actions"><div class="row-actions">
-        <button class="btn" data-roster="${c.id}">👥 Học viên (${n})</button>
+        <button class="btn" data-detail="${c.id}">📋 Chi tiết (${n})</button>
         <button class="btn ghost" data-edit="${c.id}">Sửa</button>
         <button class="btn ghost" data-dup="${c.id}">Nhân bản</button>
         ${stL.archived ? `<button class="btn ghost" data-restore="${c.id}">Khôi phục</button>`
@@ -117,7 +185,7 @@ window.Classes = (function () {
   }
 
   /* ---------------- CLASS FORM ---------------- */
-  function classForm(c) {
+  function classForm(c, onDone) {
     c = c || {}; const isNew = !c.id; const g = (k, d = "") => c[k] == null ? d : c[k];
     const ov = document.createElement("div"); ov.className = "sm-ov";
     ov.innerHTML = `<div class="sm-modal"><div class="mh"><h3>${isNew ? "➕ Thêm lớp" : "✏️ Sửa lớp"}</h3>
@@ -202,7 +270,7 @@ window.Classes = (function () {
     const markColor = val => colorsEl.querySelectorAll(".swatch").forEach(s => s.classList.toggle("on", (s.dataset.color || "") === (val || "")));
     colorsEl.querySelectorAll(".swatch").forEach(s => s.addEventListener("click", () => { colorHid.value = s.dataset.color || ""; if (s.dataset.color) colorPick.value = s.dataset.color; markColor(colorHid.value); }));
     colorPick.addEventListener("input", () => { colorHid.value = colorPick.value; markColor(colorPick.value); });
-    ov.querySelector("#c-save").addEventListener("click", () => saveClass(ov, c));
+    ov.querySelector("#c-save").addEventListener("click", () => saveClass(ov, c, onDone));
   }
 
   // Mục "Học viên" trong form lớp — tìm & chọn học viên có sẵn, tạo học viên mới.
@@ -361,7 +429,8 @@ window.Classes = (function () {
       });
     }
   }
-  async function saveClass(ov, c) {
+  async function saveClass(ov, c, onDone) {
+    const refresh = () => { SM.invalidate("classes"); loadClasses(); if (onDone) onDone(); };
     const V = id => ov.querySelector("#" + id).value;
     const msg = ov.querySelector("#c-msg"); const say = (t, e) => { msg.textContent = t; msg.className = "msg" + (e ? " err" : ""); };
     const name = V("c-name").trim(); if (!name) return say("Thiếu tên lớp.", true);
@@ -421,13 +490,13 @@ window.Classes = (function () {
       const res = await syncSchedules(c.id, slots, start, end);
       schedErr = res.error; if (!res.error && (res.added || res.removed || res.changed)) note = " · lịch tuần đã cập nhật";
     }
-    if (schedErr) { ov.remove(); SM.toast((c.id ? "Đã lưu lớp" : "Đã tạo lớp") + "; lịch tuần lỗi: " + schedErr.message + " — chỉnh ở 🗓️ Lịch học.", "err"); SM.invalidate("classes"); loadClasses(); return; }
+    if (schedErr) { ov.remove(); SM.toast((c.id ? "Đã lưu lớp" : "Đã tạo lớp") + "; lịch tuần lỗi: " + schedErr.message + " — chỉnh ở 🗓️ Lịch học.", "err"); refresh(); return; }
 
     // Ghi danh học viên (lớp mới: thêm tất cả; sửa: đồng bộ thêm/gỡ). Dùng bảng enrollments.
     let stuNote = "";
     if (picked && (picked.size || c.id)) {
       const er = await applyEnrollments(newId, !c.id, picked);
-      if (er.error) { ov.remove(); SM.toast((c.id ? "Đã lưu lớp" : "Đã tạo lớp") + note + "; lỗi ghi danh: " + er.error.message, "err"); SM.invalidate("classes"); loadClasses(); return; }
+      if (er.error) { ov.remove(); SM.toast((c.id ? "Đã lưu lớp" : "Đã tạo lớp") + note + "; lỗi ghi danh: " + er.error.message, "err"); refresh(); return; }
       const parts = []; if (er.added) parts.push("+" + er.added + " học viên"); if (er.removed) parts.push("−" + er.removed + " rời lớp");
       if (parts.length) stuNote = " · " + parts.join(", ");
     }
@@ -441,11 +510,11 @@ window.Classes = (function () {
       const { from, to } = genRange(start, end, SM.todayISO());
       if (to >= from) {
         const { count, error: ge } = await generateSessionsRange(newId, from, to);
-        if (ge) { ov.remove(); SM.toast((c.id ? "✓ Đã lưu lớp" : "✓ Đã tạo lớp") + note + stuNote + "; chưa sinh buổi được: " + ge.message + " — vào 🗓️ Lịch học bấm ⚡ Sinh buổi học.", "err"); SM.invalidate("classes"); loadClasses(); return; }
+        if (ge) { ov.remove(); SM.toast((c.id ? "✓ Đã lưu lớp" : "✓ Đã tạo lớp") + note + stuNote + "; chưa sinh buổi được: " + ge.message + " — vào 🗓️ Lịch học bấm ⚡ Sinh buổi học.", "err"); refresh(); return; }
         if (count > 0) { genNote = ` và tự động sinh ${count} buổi học`; if (!c.id) note = ""; }   // buổi sinh ra đã ngụ ý lịch tuần
       }
     }
-    ov.remove(); SM.toast((c.id ? "✓ Đã lưu lớp" : "✓ Đã tạo lớp") + genNote + note + stuNote, "ok"); SM.invalidate("classes"); loadClasses();
+    ov.remove(); SM.toast((c.id ? "✓ Đã lưu lớp" : "✓ Đã tạo lớp") + genNote + note + stuNote, "ok"); refresh();
   }
 
   // Khớp class_schedules của lớp với danh sách thứ đã chọn: cập nhật giờ (giữ id),
@@ -491,55 +560,103 @@ window.Classes = (function () {
     if (error) return SM.toast("Không nhân bản được: " + error.message, "err");
     SM.toast("✓ Đã nhân bản lớp (không kèm học viên/lịch)", "ok"); SM.invalidate("classes"); loadClasses();
   }
-  async function archiveClass(id, on) {
+  async function archiveClass(id, on, after) {
     const c = cls(id), n = counts[id] || 0;
     const ok = await SM.confirmDialog({ title: on ? "Lưu trữ lớp?" : "Khôi phục lớp?", danger: on, okText: on ? "Lưu trữ" : "Khôi phục",
       body: on ? `Ẩn lớp <b>${SM.esc(c.name)}</b>${n ? " (đang có " + n + " học viên)" : ""}. Toàn bộ ghi danh, điểm danh, học phí <b>vẫn được giữ</b>.` : `Đưa lớp <b>${SM.esc(c.name)}</b> trở lại danh sách chính.` });
     if (!ok) return;
     const { error } = await sb.from("classes").update({ archived_at: on ? new Date().toISOString() : null }).eq("id", id);
     if (error) return SM.toast("Lỗi: " + error.message, "err");
-    SM.toast(on ? "🗄️ Đã lưu trữ" : "↩ Đã khôi phục", "ok"); SM.invalidate("classes"); loadClasses();
+    SM.toast(on ? "🗄️ Đã lưu trữ" : "↩ Đã khôi phục", "ok"); SM.invalidate("classes");
+    if (after) after(); else loadClasses();
   }
 
-  /* ---------------- ROSTER ---------------- */
-  function paintRoster() {
-    const c = cls(curId);
+  /* ---------------- TRANG CHI TIẾT LỚP (hub) ---------------- */
+  function paintDetail() {
+    const c = (detailData && detailData.cls) || cls(curId);
+    const d = detailData;
     const cur = roster.filter(e => e.status === "active");
     const former = roster.filter(e => e.status === "former");
-    const list = showFormer ? former : cur;
     const cap = c.max_students;
+    const full = cap != null && cur.length >= cap;
+    const schedTxt = (d && d.schedules && d.schedules.length)
+      ? SCHED_DAYS.filter(x => d.schedules.some(s => s.weekday === x.dow))
+          .map(x => { const s = d.schedules.find(z => z.weekday === x.dow); return `${x.lbl} ${SM.hm(s.start_time)}–${SM.hm(s.end_time)}`; }).join(" · ")
+      : "";
     box.innerHTML = `
-      <div class="toolbar" style="justify-content:space-between">
+      <div class="toolbar" style="justify-content:space-between;flex-wrap:wrap;gap:.5rem;">
         <button class="btn ghost" data-act="back">← Danh sách lớp</button>
+        <div class="row-actions" style="display:flex;gap:.4rem;flex-wrap:wrap;">
+          <button class="btn ghost" data-act="edit">✏️ Sửa lớp</button>
+          <button class="btn ghost" data-act="dup">Nhân bản</button>
+          <button class="btn ghost" data-act="arch" style="color:var(--danger);border-color:var(--danger)">Lưu trữ</button>
+        </div>
+      </div>
+      <h1 style="margin:.1rem 0 .2rem;">${SM.classDot(c.color)}${SM.esc(c.name)}
+        <span class="badge ${CBADGE[c.status] || "mute"}">${CSTATUS[c.status] || c.status}</span></h1>
+      <p class="muted" style="margin:.1rem 0 .9rem;">${c.subject ? SM.esc(c.subject) + " · " : ""}GV ${SM.esc(tName(c.teacher_id))}${c.room ? " · Phòng " + SM.esc(c.room) : ""}${c.start_date ? " · Từ " + SM.dmy(c.start_date) + (c.end_date ? " → " + SM.dmy(c.end_date) : "") : ""} · ${METHOD[c.tuition_method] || ""} ${SM.vnd(c.tuition_amount)}${schedTxt ? " · 🗓️ " + schedTxt : ""}</p>
+      ${detailBusy || !d ? `<div class="card placeholder"><span class="spinner"></span></div>` : `
+      <div class="sm-cards" style="margin:.2rem 0 1rem;">
+        <div class="stat card"><div class="k">Sĩ số</div><div class="v">${cur.length}${cap != null ? " / " + cap : ""}</div><div class="sub">${full ? '<span class="badge bad">đã đầy</span>' : (cap != null ? (cap - cur.length) + " chỗ trống" : "không giới hạn")} · ${former.length} đã rời</div></div>
+        <div class="stat card"><div class="k">Chuyên cần lớp</div><div class="v">${d.avgRate == null ? "—" : d.avgRate + "%"}</div><div class="sub">${d.held} buổi đã học · ${d.upcoming.length} sắp tới</div></div>
+        <div class="stat card"><div class="k">Học phí tháng ${d.monthLabel}</div><div class="v">${SM.vnd(d.monthBilled)}</div><div class="sub">đã thu ${SM.vnd(d.monthPaid)}</div></div>
+        <div class="stat card"><div class="k">Còn nợ (lớp này)</div><div class="v" style="${d.outstanding > 0 ? "color:var(--danger)" : ""}">${SM.vnd(d.outstanding)}</div><div class="sub">các hóa đơn đã chốt</div></div>
+      </div>
+      <div class="toolbar" style="flex-wrap:wrap;gap:.4rem;margin-bottom:.7rem;">
+        <span class="muted" style="align-self:center;font-size:.85rem;">Mở nhanh cho lớp này:</span>
+        <button class="btn ghost" data-link="schedule">🗓️ Lịch học</button>
+        <button class="btn ghost" data-link="attendance">✅ Điểm danh</button>
+        <button class="btn ghost" data-link="tuition-rates">💰 Mức phí</button>
+        <button class="btn ghost" data-link="tuition-invoices">🧾 Hóa đơn</button>
+      </div>
+      ${sessionsCard(d)}
+      <div class="toolbar" style="justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-top:1rem;">
+        <div class="row-actions" style="display:flex;gap:.4rem;">
+          <button class="btn ${showFormer ? "ghost" : ""}" data-act="tab-cur">Đang học (${cur.length})</button>
+          <button class="btn ${showFormer ? "" : "ghost"}" data-act="tab-former">Đã rời lớp (${former.length})</button>
+        </div>
         ${!showFormer ? `<button class="btn" data-act="addstu">➕ Thêm học viên</button>` : ""}
       </div>
-      <h1 style="margin:.1rem 0 .2rem;">${SM.esc(c.name)} <span class="badge ${CBADGE[c.status] || "mute"}">${CSTATUS[c.status] || ""}</span></h1>
-      <p class="muted" style="margin:.1rem 0 .8rem;">${SM.esc(c.subject || "")} · GV ${SM.esc(tName(c.teacher_id))} · ${SM.vnd(c.tuition_amount)} (${METHOD[c.tuition_method] || ""})
-        · Sĩ số <b>${cur.length}${cap != null ? " / " + cap : ""}</b></p>
-      <div class="toolbar">
-        <button class="btn ${showFormer ? "ghost" : ""}" data-act="tab-cur">Đang học (${cur.length})</button>
-        <button class="btn ${showFormer ? "" : "ghost"}" data-act="tab-former">Đã rời lớp (${former.length})</button>
-        ${!showFormer && sel.size ? `<span style="margin-left:auto;align-self:center">Đã chọn ${sel.size}:</span>
+      ${!showFormer && sel.size ? `<div class="toolbar" style="gap:.4rem;"><span style="align-self:center">Đã chọn ${sel.size}:</span>
           <button class="btn ghost" data-act="bulk-transfer">Chuyển lớp</button>
-          <button class="btn ghost" data-act="bulk-remove" style="color:var(--danger);border-color:var(--danger)">Gỡ khỏi lớp</button>` : ""}
-      </div>
-      ${rosterBusy ? `<div class="card placeholder"><span class="spinner"></span></div>`
-        : !list.length ? `<div class="card placeholder"><div class="big">👥</div><p>${showFormer ? "Chưa có học viên nào rời lớp." : "Lớp chưa có học viên. Bấm ➕ Thêm học viên."}</p></div>`
-        : `<div class="sm-table-wrap"><table class="sm-table"><thead><tr>
-            ${!showFormer ? `<th style="width:34px"><input type="checkbox" id="selall"></th>` : ""}
-            <th>Mã</th><th>Học viên</th><th>SĐT</th><th>${showFormer ? "Rời ngày" : "Vào ngày"}</th>${showFormer ? "" : "<th></th>"}</tr></thead>
-            <tbody>${list.map(e => rosterRow(e)).join("")}</tbody></table></div>`}`;
-    wireRoster();
+          <button class="btn ghost" data-act="bulk-remove" style="color:var(--danger);border-color:var(--danger)">Gỡ khỏi lớp</button></div>` : ""}
+      ${rosterTable(cur, former)}`}`;
+    wireDetail();
   }
-  function rosterRow(e) {
+  function sessionsCard(d) {
+    if (!d.sessions.length) return `<div class="card" style="padding:.9rem 1.1rem;"><p class="muted" style="margin:0;">Chưa có buổi học nào. Thêm lịch tuần khi sửa lớp, hoặc vào 🗓️ Lịch học để sinh buổi.</p></div>`;
+    const up = d.upcoming;
+    const line = s => `<div style="display:flex;justify-content:space-between;gap:.6rem;padding:.4rem .1rem;border-bottom:1px solid var(--line);">
+        <span>${SM.dmy(s.date)} · <span class="muted">${SM.WEEKDAYS[new Date(s.date + "T00:00:00").getDay()]}</span>${s.type && s.type !== "regular" ? ` <span class="badge mute">${s.type === "makeup" ? "Bù" : "Thêm"}</span>` : ""}</span>
+        <span class="muted" style="font-size:.85rem;">${SM.hm(s.start_time)}–${SM.hm(s.end_time)}</span></div>`;
+    return `<div class="card" style="padding:.6rem 1.1rem;">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.4rem;">
+        <b>Buổi sắp tới</b>
+        <span class="muted" style="font-size:.82rem;">${up.length ? up.length + " buổi sắp tới" : "không có buổi sắp tới"} · ${d.held} đã học${d.cancelled ? ` · ${d.cancelled} đã hủy` : ""}</span></div>
+      ${up.length ? up.slice(0, 6).map(line).join("") + (up.length > 6 ? `<p class="muted" style="font-size:.82rem;margin:.45rem 0 0;">… và ${up.length - 6} buổi nữa</p>` : "")
+        : `<p class="muted" style="margin:.45rem 0 .2rem;">Không có buổi nào sắp tới.</p>`}</div>`;
+  }
+  function rosterTable(cur, former) {
+    const list = showFormer ? former : cur;
+    if (!list.length) return `<div class="card placeholder"><div class="big">👥</div><p>${showFormer ? "Chưa có học viên nào rời lớp." : "Lớp chưa có học viên. Bấm ➕ Thêm học viên."}</p></div>`;
+    return `<div class="sm-table-wrap"><table class="sm-table"><thead><tr>
+        ${!showFormer ? `<th style="width:34px"><input type="checkbox" id="selall"></th>` : ""}
+        <th>Mã</th><th>Học viên</th><th>${showFormer ? "Rời ngày" : "Vào ngày"}</th><th>Chuyên cần</th><th>Công nợ</th>${showFormer ? "" : "<th></th>"}</tr></thead>
+        <tbody>${list.map(e => detailRosterRow(e)).join("")}</tbody></table></div>`;
+  }
+  function detailRosterRow(e) {
     const s = e.student || {};
+    const x = (detailData && detailData.perStu[s.id]) || {};
     const av = s.photo_url ? `<img class="avatar" src="${SM.esc(s.photo_url)}">` : `<span class="avatar">${SM.esc((s.full_name || "?").trim().split(/\s+/).slice(-1)[0][0] || "?").toUpperCase()}</span>`;
+    const override = e.tuition_override != null ? ` <span class="badge mute" title="Mức phí riêng">${SM.vnd(e.tuition_override)}</span>` : "";
+    const disc = (e.discount_amount || e.discount_percent) ? ` <span class="badge mute" title="Giảm giá">−${e.discount_percent ? e.discount_percent + "%" : SM.vnd(e.discount_amount)}</span>` : "";
     return `<tr>
       ${!showFormer ? `<td><input type="checkbox" data-sel="${e.id}" data-stu="${s.id}" ${sel.has(e.id) ? "checked" : ""}></td>` : ""}
       <td data-th="Mã"><code>${SM.esc(s.code || "")}</code></td>
-      <td data-th="Học viên"><span style="display:inline-flex;align-items:center;gap:.5rem">${av}<b>${SM.esc(s.full_name || "")}</b></span></td>
-      <td data-th="SĐT">${SM.esc(s.phone || "—")}</td>
+      <td data-th="Học viên"><span style="display:inline-flex;align-items:center;gap:.5rem">${av}<b>${SM.esc(s.full_name || "")}</b></span>${override}${disc}</td>
       <td data-th="Ngày">${showFormer ? SM.dmy(e.left_on) : SM.dmy(e.joined_on)}</td>
+      <td data-th="Chuyên cần">${rateBadge(x.rate == null ? null : x.rate)}${x.notRec ? ` <span class="badge warn" title="Buổi chưa điểm danh">${x.notRec}</span>` : ""}</td>
+      <td data-th="Công nợ">${x.balance == null ? '<span class="muted">—</span>' : balCell(x.balance)}</td>
       ${showFormer ? "" : `<td class="cell-actions"><div class="row-actions">
         <button class="btn ghost" data-transfer="${e.id}" data-stu="${s.id}">Chuyển lớp</button>
         <button class="btn ghost" data-remove="${e.id}" data-stu="${s.id}" style="color:var(--danger);border-color:var(--danger)">Gỡ</button>
@@ -589,7 +706,7 @@ window.Classes = (function () {
       const rows = [...picked].map(sid => ({ student_id: sid, class_id: curId, joined_on: SM.todayISO(), status: "active" }));
       const { error } = await sb.from("enrollments").insert(rows);
       if (error) { addBtn.disabled = false; ov.querySelector("#as-msg").textContent = "Lỗi: " + error.message; ov.querySelector("#as-msg").className = "msg err"; return; }
-      ov.remove(); SM.toast(`✓ Đã thêm ${rows.length} học viên`, "ok"); loadRoster(curId); loadClasses();
+      ov.remove(); SM.toast(`✓ Đã thêm ${rows.length} học viên`, "ok"); loadDetail(curId); loadClasses();
     });
   }
 
@@ -602,7 +719,7 @@ window.Classes = (function () {
       const { error } = await sb.from("enrollments").update({ status: "former", left_on: today }).eq("id", id);
       if (error) { SM.toast("Lỗi gỡ: " + error.message, "err"); break; }
     }
-    sel.clear(); SM.toast("✓ Đã gỡ khỏi lớp", "ok"); loadRoster(curId); loadClasses();
+    sel.clear(); SM.toast("✓ Đã gỡ khỏi lớp", "ok"); loadDetail(curId); loadClasses();
   }
 
   function transferModal(items) {
@@ -634,7 +751,7 @@ window.Classes = (function () {
         const { error } = await sb.rpc("transfer_student", { p_student: it.studentId, p_from_class: curId, p_to_class: to, p_date: date, p_reason: reason, p_credit: credit, p_notes: notes });
         if (error) { ov.querySelector("#t-go").disabled = false; return say("Lỗi chuyển: " + error.message, true); }
       }
-      ov.remove(); sel.clear(); SM.toast(`✓ Đã chuyển ${items.length} học viên`, "ok"); loadRoster(curId); loadClasses();
+      ov.remove(); sel.clear(); SM.toast(`✓ Đã chuyển ${items.length} học viên`, "ok"); loadDetail(curId); loadClasses();
     });
   }
 
@@ -652,7 +769,7 @@ window.Classes = (function () {
     box.onclick = onListClick;   // gán (không cộng dồn) để không bị bấm 1 lần chạy nhiều lần
   }
   function onListClick(e) {
-    const b = e.target.closest("[data-act],[data-edit],[data-arch],[data-restore],[data-dup],[data-roster]"); if (!b) return;
+    const b = e.target.closest("[data-act],[data-edit],[data-arch],[data-restore],[data-dup],[data-detail]"); if (!b) return;
     if (b.dataset.act === "add") return classForm(null);
     if (b.dataset.act === "togglearch") { stL.archived = !stL.archived; stL.page = 1; stL.status = ""; return loadClasses(); }
     if (b.dataset.act === "first") { stL.page = 1; return loadClasses(); }
@@ -663,23 +780,35 @@ window.Classes = (function () {
     if (b.dataset.dup) return duplicateClass(b.dataset.dup);
     if (b.dataset.arch) return archiveClass(b.dataset.arch, true);
     if (b.dataset.restore) return archiveClass(b.dataset.restore, false);
-    if (b.dataset.roster) { curId = b.dataset.roster; view = "roster"; showFormer = false; sel.clear(); return loadRoster(curId); }
+    if (b.dataset.detail) { showFormer = false; sel.clear(); return loadDetail(b.dataset.detail); }
   }
-  function wireRoster() {
+  function wireDetail() {
     const all = box.querySelector("#selall");
     if (all) all.addEventListener("change", () => {
       box.querySelectorAll("[data-sel]").forEach(cb => { cb.checked = all.checked; cb.checked ? sel.add(cb.dataset.sel) : sel.delete(cb.dataset.sel); });
-      paintRoster();
+      paintDetail();
     });
-    box.querySelectorAll("[data-sel]").forEach(cb => cb.addEventListener("change", () => { cb.checked ? sel.add(cb.dataset.sel) : sel.delete(cb.dataset.sel); paintRoster(); }));
-    box.onclick = onRosterClick;   // gán (không cộng dồn) để không bị bấm 1 lần chạy nhiều lần
+    box.querySelectorAll("[data-sel]").forEach(cb => cb.addEventListener("change", () => { cb.checked ? sel.add(cb.dataset.sel) : sel.delete(cb.dataset.sel); paintDetail(); }));
+    box.onclick = onDetailClick;   // gán (không cộng dồn) để không bị bấm 1 lần chạy nhiều lần
   }
-  function onRosterClick(e) {
-    const b = e.target.closest("[data-act],[data-transfer],[data-remove]"); if (!b) return;
-    if (b.dataset.act === "back") { view = "list"; sel.clear(); return paintList(); }
+  // Mở module khác đã lọc sẵn theo lớp đang xem (đổi hash → index.html truyền opts).
+  function openFor(kind) {
+    const id = curId;
+    if (kind === "schedule") location.hash = "#schedule?class=" + id;
+    else if (kind === "attendance") location.hash = "#attendance?class=" + id + "&tab=history";
+    else if (kind === "tuition-rates") location.hash = "#tuition?class=" + id + "&tab=rates";
+    else if (kind === "tuition-invoices") location.hash = "#tuition?class=" + id + "&tab=invoices";
+  }
+  function onDetailClick(e) {
+    const b = e.target.closest("[data-act],[data-link],[data-transfer],[data-remove]"); if (!b) return;
+    if (b.dataset.link) return openFor(b.dataset.link);
+    if (b.dataset.act === "back") { view = "list"; sel.clear(); return loadClasses(); }
+    if (b.dataset.act === "edit") return classForm(cls(curId), () => loadDetail(curId));
+    if (b.dataset.act === "dup") return duplicateClass(curId);
+    if (b.dataset.act === "arch") return archiveClass(curId, true, () => { view = "list"; sel.clear(); loadClasses(); });
     if (b.dataset.act === "addstu") return addStudentsModal();
-    if (b.dataset.act === "tab-cur") { showFormer = false; sel.clear(); return paintRoster(); }
-    if (b.dataset.act === "tab-former") { showFormer = true; sel.clear(); return paintRoster(); }
+    if (b.dataset.act === "tab-cur") { showFormer = false; sel.clear(); return paintDetail(); }
+    if (b.dataset.act === "tab-former") { showFormer = true; sel.clear(); return paintDetail(); }
     if (b.dataset.remove) { const s = roster.find(x => x.id === b.dataset.remove); return removeStudents([b.dataset.remove], "<b>" + SM.esc((s.student || {}).full_name || "") + "</b>"); }
     if (b.dataset.transfer) return transferModal([{ enrollId: b.dataset.transfer, studentId: b.dataset.stu }]);
     if (b.dataset.act === "bulk-remove") { const items = [...sel]; return removeStudents(items, "<b>" + items.length + " học viên</b>"); }

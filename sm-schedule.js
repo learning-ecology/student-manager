@@ -511,9 +511,10 @@ window.Schedule = (function () {
   }
 
   return {
-    async render(el, me) {
+    async render(el, me, opts) {
       ME = me; box = el;
       if (!st.anchor) st.anchor = SM.todayISO();
+      if (opts && opts.classId) { st.classId = opts.classId; st.tab = "cal"; }   // mở sẵn theo lớp (từ trang chi tiết lớp)
       box.onclick = onClick;                       // thay handler cũ, không bị chồng
       box.innerHTML = `<div class="card placeholder"><span class="spinner"></span></div>`;
       await loadStatic();

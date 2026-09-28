@@ -45,6 +45,22 @@ window.Tuition = (function () {
   const DEFAULT_FLAGS = { charge_present: true, charge_authorised_absence: false, charge_unauthorised_absence: true,
                           charge_cancelled: false, charge_makeup: false, charge_extra: true };
 
+  // --- thu tiền nhanh ngay trên hóa đơn (đồng bộ với module Thanh toán) ---
+  const PAYMETHOD = { cash: "Tiền mặt", bank_transfer: "Chuyển khoản", card: "Thẻ", other: "Khác" };
+  const PAYABLE = new Set(["unpaid", "partially_paid", "overdue"]);       // hóa đơn đã chốt, còn nợ → thu được
+  const netPay = list => (list || []).reduce((a, p) => a + (p.is_refund ? -p.amount : p.amount), 0);
+  // Tính lại trạng thái hóa đơn theo thanh toán (giống refreshInvoiceStatus của module Thanh toán).
+  async function refreshInvoiceStatusLocal(invId) {
+    const { data: iv } = await sb.from("invoices").select("id,total,status,due_date").eq("id", invId).single();
+    if (!iv || iv.status === "draft" || iv.status === "cancelled" || iv.status === "waived") return;
+    const { data: ps } = await sb.from("payments").select("amount,is_refund,invoice_id").eq("invoice_id", invId);
+    const paid = netPay(ps);
+    const s = (iv.total > 0 && paid >= iv.total) ? "paid"
+      : paid > 0 ? "partially_paid"
+      : (iv.due_date && iv.due_date < SM.todayISO()) ? "overdue" : "unpaid";
+    if (s !== iv.status) await sb.from("invoices").update({ status: s, updated_at: new Date().toISOString() }).eq("id", invId);
+  }
+
   const cName = id => (classes.find(c => c.id === id) || {}).name || "—";
   const cls = id => classes.find(c => c.id === id) || {};
   const fmtDate = d => SM.dmy(d).slice(0, 5);   // DD/MM
@@ -615,9 +631,14 @@ window.Tuition = (function () {
     ov.addEventListener("click", e => { if (e.target === ov || e.target.dataset.x === "close") ov.remove(); });
 
     const { data: inv } = await sb.from("invoices").select("*, student:students(code,full_name), klass:classes(name)").eq("id", id).single();
-    const { data: lines } = await sb.from("invoice_lines").select("*").eq("invoice_id", id).order("created_at");
+    const [{ data: lines }, { data: pays }] = await Promise.all([
+      sb.from("invoice_lines").select("*").eq("invoice_id", id).order("created_at"),
+      sb.from("payments").select("amount,is_refund,invoice_id").eq("invoice_id", id)
+    ]);
     const stt = ISTATUS[inv.status] || { l: inv.status, c: "mute" };
     const isDraft = inv.status === "draft";
+    const outstanding = inv.total - netPay(pays);                          // còn phải thu
+    const canPay = !isDraft && PAYABLE.has(inv.status) && outstanding > 0; // đã chốt & còn nợ
     const cfg = await SM.refSettings().catch(() => null);
     const center = (cfg && cfg.center_name) || "Trung tâm";
     const docHtml = invoiceDocHtml(inv, lines || [], center);
@@ -635,7 +656,7 @@ window.Tuition = (function () {
         <button class="btn ghost" data-x="pdf">🖨 PDF</button>
         <button class="btn ghost" data-x="png">🖼 Ảnh PNG</button>
         ${isDraft ? `<button class="btn" data-x="finalize">🔒 Chốt hóa đơn</button>`
-          : `<button class="btn ghost" data-x="close">Đóng</button>`}
+          : `${canPay ? `<button class="btn" data-x="pay">💵 Xác nhận thanh toán</button>` : ""}<button class="btn ghost" data-x="close">Đóng</button>`}
         <span class="msg" id="iv-msg" style="align-self:center"></span>
       </div>`;
 
@@ -673,6 +694,44 @@ window.Tuition = (function () {
     };
     const fin = modal.querySelector('[data-x="finalize"]');
     if (fin) fin.onclick = () => finalizeDialog(inv, ov);
+    const payB = modal.querySelector('[data-x="pay"]');
+    if (payB) payB.onclick = () => quickPayDialog(inv, outstanding, ov);
+  }
+
+  // Thu tiền nhanh ngay trên hóa đơn: tạo giao dịch thanh toán cho phần còn nợ,
+  // cập nhật trạng thái hóa đơn (→ Đã thanh toán khi thu đủ). Đồng bộ với module Thanh toán.
+  function quickPayDialog(inv, outstanding, parentOv) {
+    const ov = document.createElement("div"); ov.className = "sm-ov"; ov.style.zIndex = "150";
+    ov.innerHTML = `<div class="sm-modal" style="max-width:430px;">
+      <div class="mh"><h3>Xác nhận thanh toán</h3><button class="btn ghost" data-x="close">✕</button></div>
+      <div class="mb">
+        <p style="margin:.1rem 0 .8rem;">Thu học phí của <b>${SM.esc(inv.student ? inv.student.full_name : "")}</b> · ${MONTHS[inv.period_month - 1]}/${inv.period_year}.</p>
+        <div class="field"><label>Số tiền thu (VND)</label><input id="qp-amt" type="number" min="1" value="${outstanding}"></div>
+        <div class="grid2">
+          <div class="field"><label>Hình thức</label><select id="qp-method">${Object.entries(PAYMETHOD).map(([k, v]) => `<option value="${k}">${v}</option>`).join("")}</select></div>
+          <div class="field"><label>Ngày thu (DD/MM/YYYY)</label><input id="qp-date" value="${SM.dmy(SM.todayISO())}"></div>
+        </div>
+        <p class="muted" style="font-size:.82rem;margin:.5rem 0 0;">Còn phải thu <b>${SM.vnd(outstanding)}</b>. Thu đủ sẽ chuyển hóa đơn sang <b>Đã thanh toán</b>; thu một phần → <b>Thu một phần</b>.</p>
+      </div>
+      <div class="mf"><button class="btn ghost" data-x="close">Hủy</button><button class="btn" id="qp-go">💵 Xác nhận đã thu</button>
+        <span class="msg" id="qp-msg" style="align-self:center"></span></div></div>`;
+    document.body.appendChild(ov);
+    ov.addEventListener("click", e => { if (e.target === ov || e.target.dataset.x === "close") ov.remove(); });
+    ov.querySelector("#qp-go").onclick = async () => {
+      const say = (t, e) => { const m = ov.querySelector("#qp-msg"); m.textContent = t; m.className = "msg" + (e ? " err" : ""); };
+      const amount = Math.round(+ov.querySelector("#qp-amt").value || 0);
+      if (!(amount > 0)) return say("Số tiền phải lớn hơn 0.", true);
+      const date = SM.parseDmy(ov.querySelector("#qp-date").value.trim());
+      if (!date) return say("Ngày thu không hợp lệ.", true);
+      const go = ov.querySelector("#qp-go"); go.disabled = true;
+      const row = { student_id: inv.student_id, invoice_id: inv.id, amount, is_refund: false,
+        paid_on: date, method: ov.querySelector("#qp-method").value, reference: "", note: "", created_by: ME.user.id };
+      const { error } = await sb.from("payments").insert(row);
+      if (error) { go.disabled = false; return say("Không lưu được: " + error.message, true); }
+      await refreshInvoiceStatusLocal(inv.id);
+      ov.remove(); if (parentOv) parentOv.remove();
+      SM.toast("✓ Đã thu " + SM.vnd(amount), "ok"); loadInvoices();
+    };
   }
 
   function finalizeDialog(inv, parentOv) {

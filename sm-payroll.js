@@ -33,17 +33,28 @@ window.Payroll = (function () {
     return cand.filter(r => r.class_id == null).sort(byRecent)[0] || null;
   }
   // Tính LIVE theo danh sách buổi đã dạy → gộp theo GV.
+  // Dạy thay: GV dạy thay được tính công buổi; GV chính có dòng 0đ để đối chiếu (không trừ).
   function computeAll(sess) {
     const map = {};
+    const ensure = tid => (map[tid] = map[tid] || { count: 0, base: 0, lines: [] });
+    const rateAmt = (tid, s, hours) => { const r = resolveRate(tid, s.class_id, s.date); return { r, amount: !r ? 0 : (r.kind === "per_hour" ? Math.round(r.amount * hours) : r.amount) }; };
     for (const s of sess) {
-      const tid = s.teacher_id || cls(s.class_id).teacher_id;
-      if (!tid) continue;                                  // buổi chưa gán GV → bỏ qua (báo ở tab Điều hành)
+      const primary = s.teacher_id || cls(s.class_id).teacher_id;
       const hours = hoursOf(s);
-      const r = resolveRate(tid, s.class_id, s.date);
-      const amount = !r ? 0 : (r.kind === "per_hour" ? Math.round(r.amount * hours) : r.amount);
-      const g = map[tid] = map[tid] || { count: 0, base: 0, lines: [] };
-      g.count++; g.base += amount;
-      g.lines.push({ date: s.date, class_id: s.class_id, class: cName(s.class_id), hours, kind: r ? r.kind : null, rate: r ? r.amount : 0, amount, noRate: !r });
+      const subId = s.substitute_id || null;
+      if (subId) {                                          // buổi có người dạy thay
+        const { r, amount } = rateAmt(subId, s, hours);
+        const g = ensure(subId); g.count++; g.base += amount;
+        g.lines.push({ date: s.date, class_id: s.class_id, class: cName(s.class_id), hours, kind: r ? r.kind : null, rate: r ? r.amount : 0, amount, noRate: !r, sub: true });
+        if (primary && primary !== subId) {                 // GV chính vắng — dòng 0đ đối chiếu
+          ensure(primary).lines.push({ date: s.date, class_id: s.class_id, class: cName(s.class_id), hours, kind: null, rate: 0, amount: 0, noRate: false, subAbsent: true, by: subId });
+        }
+      } else {
+        if (!primary) continue;                             // buổi chưa gán GV → bỏ qua (báo ở tab Điều hành)
+        const { r, amount } = rateAmt(primary, s, hours);
+        const g = ensure(primary); g.count++; g.base += amount;
+        g.lines.push({ date: s.date, class_id: s.class_id, class: cName(s.class_id), hours, kind: r ? r.kind : null, rate: r ? r.amount : 0, amount, noRate: !r });
+      }
     }
     return map;
   }
@@ -60,7 +71,7 @@ window.Payroll = (function () {
     const [tc, cl, rt, ss] = await Promise.all([
       SM.refTeachers(), SM.refClasses(),
       sb.from("teacher_rates").select("*"),
-      sb.from("sessions").select("id,class_id,date,start_time,end_time,teacher_id,status").eq("status", "held").gte("date", p.start).lte("date", p.end)
+      sb.from("sessions").select("id,class_id,date,start_time,end_time,teacher_id,substitute_id,status").eq("status", "held").gte("date", p.start).lte("date", p.end)
     ]);
     teachers = tc || []; classes = cl || [];
     if (rt.error) { busy = false; box.innerHTML = errCard(rt.error); return; }
@@ -171,7 +182,7 @@ window.Payroll = (function () {
   /* ---------------- CHI TIẾT / PHIẾU LƯƠNG 1 GV ---------------- */
   function teacherDetail(tid) {
     const p = periodRange();
-    let sess = sessions.filter(s => (s.teacher_id || cls(s.class_id).teacher_id) === tid);
+    let sess = sessions.filter(s => (s.teacher_id || cls(s.class_id).teacher_id) === tid || s.substitute_id === tid);
     if (st.cls) sess = sess.filter(s => s.class_id === st.cls);
     const comp = computeAll(sess)[tid] || { count: 0, base: 0, lines: [] };
     const editable = !p.live && !st.cls;                     // chỉ sửa phiếu khi xem theo tháng đầy đủ
@@ -188,10 +199,11 @@ window.Payroll = (function () {
     ov.innerHTML = `<div class="sm-modal"><div class="mh"><h3>Lương · ${SM.esc(tName(tid))} · ${p.live ? SM.dmy(p.start) + "–" + SM.dmy(p.end) : MONTHS[st.month - 1] + "/" + st.year}</h3><button class="btn ghost" data-x="close">✕</button></div>
       <div class="mb">
         <div class="sm-table-wrap" style="max-height:230px;overflow:auto;"><table class="sm-table"><thead><tr><th>Ngày</th><th>Lớp</th><th>Thời lượng</th><th>Định mức</th><th class="r">Tiền</th></tr></thead><tbody>
-          ${lines.length ? lines.slice().sort((a, b) => a.date < b.date ? -1 : 1).map(l => `<tr>
-            <td data-th="Ngày">${SM.dmy(l.date)}</td><td data-th="Lớp">${SM.esc(l.class || cName(l.class_id))}</td>
-            <td data-th="Thời lượng">${fmtH(l.hours)}</td>
-            <td data-th="Định mức">${l.noRate ? '<span class="badge warn">chưa đặt</span>' : (l.kind === "per_hour" ? SM.vnd(l.rate) + "/h" : SM.vnd(l.rate) + "/buổi")}</td>
+          ${lines.length ? lines.slice().sort((a, b) => a.date < b.date ? -1 : 1).map(l => `<tr${l.subAbsent ? ' style="opacity:.65"' : ""}>
+            <td data-th="Ngày">${SM.dmy(l.date)}</td>
+            <td data-th="Lớp">${SM.esc(l.class || cName(l.class_id))}${l.sub ? ' <span class="badge warn">dạy thay</span>' : ""}${l.subAbsent ? ` <span class="badge mute">vắng · thay bởi ${SM.esc(tName(l.by))}</span>` : ""}</td>
+            <td data-th="Thời lượng">${l.subAbsent ? "—" : fmtH(l.hours)}</td>
+            <td data-th="Định mức">${l.subAbsent ? "—" : (l.noRate ? '<span class="badge warn">chưa đặt</span>' : (l.kind === "per_hour" ? SM.vnd(l.rate) + "/h" : SM.vnd(l.rate) + "/buổi"))}</td>
             <td data-th="Tiền" class="r">${SM.vnd(l.amount)}</td></tr>`).join("") : `<tr><td colspan="5" class="muted" style="text-align:center">Không có buổi đã dạy.</td></tr>`}
         </tbody><tfoot><tr class="sub"><td colspan="4"><b>Tiền buổi (${count} buổi)</b></td><td class="r"><b>${SM.vnd(base)}</b></td></tr></tfoot></table></div>
         ${locked ? `<p class="muted" style="font-size:.82rem;margin:.4rem 0 0;">🔒 Phiếu đã chốt — số buổi & tiền buổi được giữ nguyên dù lớp/buổi thay đổi.</p>` : ""}

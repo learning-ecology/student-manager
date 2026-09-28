@@ -112,7 +112,9 @@ window.Schedule = (function () {
     return `<div class="sess ${s.status}${conf ? " conf" : ""}" data-sess="${s.id}" title="Bấm để sửa buổi này" style="border-left-color:${t.border};background:${t.bg};">
       <b>${SM.hm(s.start_time)}–${SM.hm(s.end_time)}</b> ${conf ? "⚠️" : ""} ${type} ${stat}
       <span class="sname">${SM.esc(cName(s.class_id))}</span>
-      <span class="muted" style="font-size:.78rem;display:block">${SM.esc(tName(s.teacher_id))}${s.room ? " · " + SM.esc(s.room) : ""}</span>
+      <span class="muted" style="font-size:.78rem;display:block">${s.substitute_id
+        ? `GV chính ${SM.esc(tName(s.teacher_id))} · <b style="color:var(--accent)">🔄 Dạy thay ${SM.esc(tName(s.substitute_id))}</b>`
+        : SM.esc(tName(s.teacher_id))}${s.room ? " · " + SM.esc(s.room) : ""}</span>
     </div>`;
   }
   function paintCal() {
@@ -203,6 +205,9 @@ window.Schedule = (function () {
         <div class="field"><label>Giáo viên</label><select id="x-teacher"><option value="">— GV của lớp —</option>
           ${teachers.map(t => `<option value="${t.id}" ${s.teacher_id === t.id ? "selected" : ""}>${SM.esc(t.full_name)}</option>`).join("")}</select></div>
         <div class="field"><label>Phòng</label><input id="x-room" value="${SM.esc(s.room || "")}"></div>
+        ${isNew ? "" : `<div class="field" style="grid-column:1/-1"><label>🔄 Dạy thay <span class="muted" style="font-weight:400">— GV chính vẫn giữ; buổi này tính công cho GV dạy thay, GV chính ghi 0đ (vắng)</span></label>
+          <select id="x-sub"><option value="">— không có người dạy thay —</option>
+          ${teachers.map(t => `<option value="${t.id}" ${s.substitute_id === t.id ? "selected" : ""}>${SM.esc(t.full_name)}</option>`).join("")}</select></div>`}
         ${isNew ? "" : `<div class="field"><label>Trạng thái</label><select id="x-status">
           ${Object.entries(SSTAT).map(([k, v]) => `<option value="${k}" ${(s.status || "scheduled") === k ? "selected" : ""}>${v}</option>`).join("")}</select></div>`}
         <div class="field" style="grid-column:1/-1"><label>Ghi chú</label><input id="x-note" value="${SM.esc(s.note || "")}" placeholder="vd: bù cho buổi nghỉ lễ 02/09"></div>
@@ -231,7 +236,7 @@ window.Schedule = (function () {
         teacher_id: V("x-teacher") || cls(classId).teacher_id || null,
         room: V("x-room").trim(), type: V("x-type"), note: V("x-note").trim()
       };
-      if (!isNew) row.status = V("x-status");
+      if (!isNew) { row.status = V("x-status"); row.substitute_id = V("x-sub") || null; row.sub_needed = !!V("x-sub"); }
       const btn = ov.querySelector("#x-save"); btn.disabled = true;
       // cảnh báo trùng GV/phòng trước khi lưu (được phép lưu tiếp nếu đồng ý)
       if (isNew || row.status !== "cancelled") {

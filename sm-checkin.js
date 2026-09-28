@@ -13,7 +13,7 @@ window.Checkin = (function () {
   const cls = id => classes.find(c => c.id === id) || {};
   const cName = id => cls(id).name || "—";
   const tName = id => id ? ((teachers.find(t => t.id === id) || {}).full_name || "GV") : "— chưa gán —";
-  const effTeacher = s => s.teacher_id || cls(s.class_id).teacher_id || null;
+  const effTeacher = s => s.substitute_id || s.teacher_id || cls(s.class_id).teacher_id || null;
   const hm = t => (t || "").slice(0, 5);
   const STAT = {
     on_time: { l: "Đúng giờ", c: "ok" }, late: { l: "Muộn", c: "warn" },
@@ -38,7 +38,7 @@ window.Checkin = (function () {
     const d = st.date || SM.todayISO(); st.date = d;
     const [tc, cl, ss] = await Promise.all([
       SM.refTeachers(), SM.refClasses(),
-      sb.from("sessions").select("id,class_id,date,start_time,end_time,teacher_id,room,status").eq("date", d).neq("status", "cancelled").order("start_time")
+      sb.from("sessions").select("id,class_id,date,start_time,end_time,teacher_id,substitute_id,room,status").eq("date", d).neq("status", "cancelled").order("start_time")
     ]);
     teachers = tc || []; classes = cl || []; sessions = ss.data || [];
     checkins = {};
@@ -70,7 +70,7 @@ window.Checkin = (function () {
       return `<tr>
         <td data-th="Giờ"><b>${hm(s.start_time)}–${hm(s.end_time)}</b></td>
         <td data-th="Lớp">${SM.classDot(cls(s.class_id).color)}<b>${SM.esc(cName(s.class_id))}</b></td>
-        <td data-th="Giáo viên">${eff ? SM.esc(tName(ck ? ck.teacher_id : eff)) : `<span class="badge warn">chưa gán</span>`}</td>
+        <td data-th="Giáo viên">${eff ? SM.esc(tName(ck ? ck.teacher_id : eff)) : `<span class="badge warn">chưa gán</span>`}${s.substitute_id ? ' <span class="badge warn" title="GV chính: ' + SM.esc(tName(s.teacher_id || cls(s.class_id).teacher_id)) + '">dạy thay</span>' : ""}</td>
         <td data-th="Chấm công">${statusCell}</td>
         <td class="cell-actions"><div class="row-actions">${actions}</div></td></tr>`;
     }).join("");

@@ -135,10 +135,10 @@ window.Students = (function () {
             <div class="field"><label>Ngày sinh (DD/MM/YYYY)</label><input id="f-dob" value="${s.dob ? SM.dmy(s.dob) : ""}" placeholder="01/09/2010"></div>
             <div class="field"><label>Giới tính</label><select id="f-gender">
               <option value="">—</option>${Object.entries(GENDER).map(([k, v]) => `<option value="${k}" ${g("gender") === k ? "selected" : ""}>${v}</option>`).join("")}</select></div>
-            <div class="field"><label>SĐT học viên</label><input id="f-phone" value="${SM.esc(g("phone"))}"></div>
+            <div class="field"><label>SĐT học viên</label><input id="f-phone" type="tel" inputmode="numeric" autocomplete="tel" value="${SM.esc(g("phone"))}"></div>
             <div class="field"><label>Email</label><input id="f-email" value="${SM.esc(g("email"))}"></div>
             <div class="field"><label>Tên phụ huynh</label><input id="f-gname" value="${SM.esc(g("guardian_name"))}"></div>
-            <div class="field"><label>SĐT phụ huynh</label><input id="f-gphone" value="${SM.esc(g("guardian_phone"))}"></div>
+            <div class="field"><label>SĐT phụ huynh</label><input id="f-gphone" type="tel" inputmode="numeric" autocomplete="tel" value="${SM.esc(g("guardian_phone"))}"></div>
             <div class="field" style="grid-column:1/-1"><label>Địa chỉ</label><input id="f-address" value="${SM.esc(g("address"))}"></div>
             <div class="field"><label>Ngày nhập học (DD/MM/YYYY)</label><input id="f-enrolled" value="${s.enrolled_on ? SM.dmy(s.enrolled_on) : SM.dmy(SM.todayISO())}"></div>
             <div class="field"><label>Trạng thái</label><select id="f-status">

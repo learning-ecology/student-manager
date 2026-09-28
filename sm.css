@@ -135,6 +135,22 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--accent-soft);bor
   #sm-toasts{bottom:calc(64px + env(safe-area-inset-bottom));}
 }
 
+/* ===== Mobile ergonomics — Tranche 3: floating action button + swipe ===== */
+.sm-fab{display:none;}
+.swipe-hint{display:none;}   /* gợi ý vuốt chỉ hiện trên mobile */
+@media(max-width:768px){
+  .swipe-hint{display:block;}
+  .sm-fab{display:flex;align-items:center;justify-content:center;position:fixed;right:16px;
+    bottom:calc(68px + env(safe-area-inset-bottom));z-index:35;width:56px;height:56px;
+    border-radius:50%;border:0;background:var(--accent);color:#fff;font-size:1.5rem;line-height:1;
+    box-shadow:0 10px 24px -6px rgba(36,86,166,.6);}
+  .sm-fab:active{transform:scale(.94);}
+  .sm-fab[hidden]{display:none;}
+  /* swipe-to-mark on attendance rows */
+  .att-row{position:relative;touch-action:pan-y;transition:transform .18s ease,background .18s ease;}
+  .att-row.swiped-present{background:var(--good-bg);}
+}
+
 /* tables */
 .toolbar{display:flex;gap:.6rem;flex-wrap:wrap;align-items:flex-end;margin-bottom:.9rem;}
 .toolbar .field{margin:0;}

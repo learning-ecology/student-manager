@@ -169,7 +169,8 @@ window.Attendance = (function () {
         <span class="badge bad" style="margin-left:.3rem;">Vắng ${sm.absent}</span>
         <span class="muted" style="margin-left:.5rem;">Tổng ${curStudents.length}</span></p>
       ${!curStudents.length ? `<div class="card placeholder"><div class="big">👥</div><p>Lớp chưa có học viên nào học vào ngày này.</p></div>`
-        : `<div class="card" style="padding:.4rem .9rem;">
+        : `<p class="muted swipe-hint" style="font-size:.82rem;margin:.1rem 0 .5rem;">💡 Vuốt một hàng sang phải để đánh dấu <b>Có mặt</b>.</p>
+          <div class="card" style="padding:.4rem .9rem;">
             ${curStudents.map(s => attRow(s)).join("")}
           </div>
           <div class="att-savebar">
@@ -346,23 +347,42 @@ window.Attendance = (function () {
     if (b.dataset.act === "allpresent") { curStudents.forEach(s => markState[s.id] = "present"); markDirty = true; return paintMark(false); }
     if (b.dataset.act === "save") return saveMark();
     if (b.dataset.note) return noteDialog(b.dataset.note);
-    if (b.dataset.set) {
-      const row = b.closest("[data-stu]"); if (!row) return;
-      markState[row.dataset.stu] = b.dataset.set; markDirty = true;
-      // cập nhật nút của đúng hàng đó, và làm mới phần tổng kết ở đầu
-      row.querySelectorAll(".att-seg [data-set]").forEach(x => x.className = "");
-      b.className = "on " + (STAT[b.dataset.set] || {}).cls;
-      const sm = markSummary();
-      const badges = box.querySelector("h1 + p + p");
-      if (badges) badges.innerHTML = `<span class="badge ok">Có mặt ${sm.present}</span>
-        <span class="badge bad" style="margin-left:.3rem;">Vắng ${sm.absent}</span>
-        <span class="muted" style="margin-left:.5rem;">Tổng ${curStudents.length}</span>`;
-    }
+    if (b.dataset.set) { const row = b.closest("[data-stu]"); if (row) applyMark(row, b.dataset.set); }
+  }
+
+  // Đặt trạng thái điểm danh cho 1 hàng (dùng chung cho bấm nút và vuốt): cập nhật
+  // state + nút của đúng hàng đó + phần tổng kết ở đầu (không vẽ lại cả màn hình).
+  function applyMark(row, status) {
+    markState[row.dataset.stu] = status; markDirty = true;
+    row.querySelectorAll(".att-seg [data-set]").forEach(x => x.className = "");
+    const btn = row.querySelector(`.att-seg [data-set="${status}"]`);
+    if (btn) btn.className = "on " + (STAT[status] || {}).cls;
+    const sm = markSummary();
+    const badges = box.querySelector("h1 + p + p");
+    if (badges) badges.innerHTML = `<span class="badge ok">Có mặt ${sm.present}</span>
+      <span class="badge bad" style="margin-left:.3rem;">Vắng ${sm.absent}</span>
+      <span class="muted" style="margin-left:.5rem;">Tổng ${curStudents.length}</span>`;
+  }
+
+  // Vuốt sang phải trên 1 hàng học viên → đánh dấu "Có mặt" (an toàn: chỉ đổi state
+  // tại chỗ như bấm nút, chưa ghi CSDL cho tới khi bấm "Lưu điểm danh").
+  let swX = 0, swY = 0, swRow = null;
+  function onTouchStart(e) {
+    const row = e.target.closest(".att-row");
+    if (!row) { swRow = null; return; }
+    const t = e.touches[0]; swRow = row; swX = t.clientX; swY = t.clientY;
+  }
+  function onTouchEnd(e) {
+    const row = swRow; swRow = null; if (!row) return;
+    const t = e.changedTouches[0]; const dx = t.clientX - swX, dy = t.clientY - swY;
+    if (Math.abs(dx) < 55 || Math.abs(dx) < Math.abs(dy) * 1.5) return;   // bỏ qua chạm dọc / vuốt ngắn
+    if (dx > 0) { applyMark(row, "present"); row.classList.add("swiped-present"); setTimeout(() => row.classList.remove("swiped-present"), 450); }
   }
 
   return {
     async render(el, me, opts) {
       ME = me; box = el; cur = null;
+      box.ontouchstart = onTouchStart; box.ontouchend = onTouchEnd;   // vuốt để điểm danh (mobile)
       if (!st.date) st.date = SM.todayISO();
       // mở sẵn theo lớp (từ trang chi tiết lớp): mặc định xem tỉ lệ chuyên cần
       if (opts && opts.classId) {

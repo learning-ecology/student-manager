@@ -331,10 +331,10 @@ window.Classes = (function () {
         <div class="field" style="grid-column:1/-1"><label>Họ và tên *</label><input id="ns-name"></div>
         <div class="field"><label>Ngày sinh (DD/MM/YYYY)</label><input id="ns-dob" placeholder="01/09/2010"></div>
         <div class="field"><label>Giới tính</label><select id="ns-gender"><option value="">—</option>${Object.entries(GEN).map(([k, v]) => `<option value="${k}">${v}</option>`).join("")}</select></div>
-        <div class="field"><label>SĐT học viên</label><input id="ns-phone"></div>
+        <div class="field"><label>SĐT học viên</label><input id="ns-phone" type="tel" inputmode="numeric" autocomplete="tel"></div>
         <div class="field"><label>Email</label><input id="ns-email"></div>
         <div class="field"><label>Tên phụ huynh</label><input id="ns-gname"></div>
-        <div class="field"><label>SĐT phụ huynh</label><input id="ns-gphone"></div>
+        <div class="field"><label>SĐT phụ huynh</label><input id="ns-gphone" type="tel" inputmode="numeric" autocomplete="tel"></div>
         <div class="field" style="grid-column:1/-1"><label>Ghi chú</label><textarea id="ns-notes" style="min-height:48px"></textarea></div>
       </div><p class="muted" style="font-size:.82rem">Mã học viên tự sinh khi lưu. Học viên sẽ được chọn vào lớp.</p></div>
       <div class="mf"><button class="btn ghost" data-x="close">Hủy</button><button class="btn" id="ns-save">💾 Tạo &amp; chọn</button>

@@ -6,7 +6,7 @@
   <title>Quản lý học viên</title>
   <link rel="preconnect" href="https://zrmgunriwvcjppjykngk.supabase.co" crossorigin>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-  <link rel="stylesheet" href="sm.css?v=43">
+  <link rel="stylesheet" href="sm.css?v=44">
   <script>try{if(localStorage.getItem("sm_theme")==="dark")document.documentElement.setAttribute("data-theme","dark");}catch(e){}</script>
 </head>
 <body>
@@ -50,27 +50,28 @@
       </main>
     </div>
     <nav class="sm-bottomnav" id="bottomNav" hidden></nav>
+    <button class="sm-fab" id="fab" hidden aria-label="Thao tác chính"></button>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=43"></script>
-  <script src="sm-lib.js?v=43"></script>
-  <script src="sm-students.js?v=43"></script>
-  <script src="sm-classes.js?v=43"></script>
-  <script src="sm-schedule.js?v=43"></script>
-  <script src="sm-teaching.js?v=43"></script>
-  <script src="sm-payroll.js?v=43"></script>
-  <script src="sm-checkin.js?v=43"></script>
-  <script src="sm-teacher.js?v=43"></script>
-  <script src="sm-tour.js?v=43"></script>
-  <script src="sm-attendance.js?v=43"></script>
-  <script src="sm-tuition.js?v=43"></script>
-  <script src="sm-payments.js?v=43"></script>
-  <script src="sm-dashboard.js?v=43"></script>
-  <script src="sm-reports.js?v=43"></script>
-  <script src="sm-audit.js?v=43"></script>
-  <script src="sm-tenants.js?v=43"></script>
-  <script src="sm-handbook.js?v=43"></script>
+  <script src="config.js?v=44"></script>
+  <script src="sm-lib.js?v=44"></script>
+  <script src="sm-students.js?v=44"></script>
+  <script src="sm-classes.js?v=44"></script>
+  <script src="sm-schedule.js?v=44"></script>
+  <script src="sm-teaching.js?v=44"></script>
+  <script src="sm-payroll.js?v=44"></script>
+  <script src="sm-checkin.js?v=44"></script>
+  <script src="sm-teacher.js?v=44"></script>
+  <script src="sm-tour.js?v=44"></script>
+  <script src="sm-attendance.js?v=44"></script>
+  <script src="sm-tuition.js?v=44"></script>
+  <script src="sm-payments.js?v=44"></script>
+  <script src="sm-dashboard.js?v=44"></script>
+  <script src="sm-reports.js?v=44"></script>
+  <script src="sm-audit.js?v=44"></script>
+  <script src="sm-tenants.js?v=44"></script>
+  <script src="sm-handbook.js?v=44"></script>
   <script>
     const $ = id => document.getElementById(id);
     let ME = null, SETTINGS = null, TENANT = null;   // TENANT: {account_type, features} — quyết định module hiển thị
@@ -198,6 +199,20 @@
       bn.onclick = e => { if (e.target.closest(".bn-more")) { e.preventDefault(); openSide(); } };
     }
 
+    // Nút thao tác nổi (FAB) — đặt hành động chính vào vùng ngón cái, theo từng trang.
+    const FAB_MAP = {
+      students: "➕", classes: "➕", payments: "➕", tuition: "⚡"
+    };
+    const FAB_SEL = { students: '[data-act="add"]', classes: '[data-act="add"]',
+      payments: '[data-act="add"]', tuition: '[data-act="build"]' };
+    function syncFab(pane) {
+      const fab = $("fab"); if (!fab) return;
+      const icon = FAB_MAP[pane];
+      if (!icon) { fab.hidden = true; fab.onclick = null; return; }
+      fab.textContent = icon; fab.hidden = false;
+      fab.onclick = () => { const b = $("content").querySelector(FAB_SEL[pane]); if (b) b.click(); };
+    }
+
     function route() {
       const raw = (location.hash.replace("#", "") || "dashboard");
       let pane = raw.split("?")[0];
@@ -214,6 +229,7 @@
         bn.querySelectorAll("a").forEach(a => { const on = a.dataset.nav === pane; a.classList.toggle("on", on); if (on) matched = true; });
         const more = bn.querySelector(".bn-more"); if (more) more.classList.toggle("on", !matched);
       }
+      syncFab(pane);
       closeSide();
       if (pane === "me") return Me.render($("content"), ME);
       if (pane === "checkin") {

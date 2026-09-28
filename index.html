@@ -6,7 +6,7 @@
   <title>Quản lý học viên</title>
   <link rel="preconnect" href="https://zrmgunriwvcjppjykngk.supabase.co" crossorigin>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-  <link rel="stylesheet" href="sm.css?v=49">
+  <link rel="stylesheet" href="sm.css?v=50">
   <script>try{if(localStorage.getItem("sm_theme")==="dark")document.documentElement.setAttribute("data-theme","dark");}catch(e){}</script>
 </head>
 <body>
@@ -56,25 +56,25 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=49"></script>
-  <script src="sm-lib.js?v=49"></script>
-  <script src="sm-students.js?v=49"></script>
-  <script src="sm-classes.js?v=49"></script>
-  <script src="sm-cohorts.js?v=49"></script>
-  <script src="sm-schedule.js?v=49"></script>
-  <script src="sm-teaching.js?v=49"></script>
-  <script src="sm-payroll.js?v=49"></script>
-  <script src="sm-checkin.js?v=49"></script>
-  <script src="sm-teacher.js?v=49"></script>
-  <script src="sm-tour.js?v=49"></script>
-  <script src="sm-attendance.js?v=49"></script>
-  <script src="sm-tuition.js?v=49"></script>
-  <script src="sm-payments.js?v=49"></script>
-  <script src="sm-dashboard.js?v=49"></script>
-  <script src="sm-reports.js?v=49"></script>
-  <script src="sm-audit.js?v=49"></script>
-  <script src="sm-tenants.js?v=49"></script>
-  <script src="sm-handbook.js?v=49"></script>
+  <script src="config.js?v=50"></script>
+  <script src="sm-lib.js?v=50"></script>
+  <script src="sm-students.js?v=50"></script>
+  <script src="sm-classes.js?v=50"></script>
+  <script src="sm-cohorts.js?v=50"></script>
+  <script src="sm-schedule.js?v=50"></script>
+  <script src="sm-teaching.js?v=50"></script>
+  <script src="sm-payroll.js?v=50"></script>
+  <script src="sm-checkin.js?v=50"></script>
+  <script src="sm-teacher.js?v=50"></script>
+  <script src="sm-tour.js?v=50"></script>
+  <script src="sm-attendance.js?v=50"></script>
+  <script src="sm-tuition.js?v=50"></script>
+  <script src="sm-payments.js?v=50"></script>
+  <script src="sm-dashboard.js?v=50"></script>
+  <script src="sm-reports.js?v=50"></script>
+  <script src="sm-audit.js?v=50"></script>
+  <script src="sm-tenants.js?v=50"></script>
+  <script src="sm-handbook.js?v=50"></script>
   <script>
     const $ = id => document.getElementById(id);
     let ME = null, SETTINGS = null, TENANT = null;   // TENANT: {account_type, features} — quyết định module hiển thị
@@ -331,7 +331,9 @@
       closeSide();
       if (pane === "me") return Me.render($("content"), ME);
       if (pane === "checkin") {
-        const s = new URLSearchParams(raw.split("?")[1] || "").get("s");
+        const cp = new URLSearchParams(raw.split("?")[1] || "");
+        const s = cp.get("s"), shiftId = cp.get("shift");
+        if (shiftId) return Checkin.renderSelfShift($("content"), ME, shiftId);
         return s ? Checkin.renderSelfCheckin($("content"), ME, s) : Checkin.render($("content"), ME);
       }
       if (pane === "settings") return renderSettings();

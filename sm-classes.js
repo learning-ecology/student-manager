@@ -647,7 +647,7 @@ window.Classes = (function () {
   function detailRosterRow(e) {
     const s = e.student || {};
     const x = (detailData && detailData.perStu[s.id]) || {};
-    const av = s.photo_url ? `<img class="avatar" src="${SM.esc(s.photo_url)}">` : `<span class="avatar">${SM.esc((s.full_name || "?").trim().split(/\s+/).slice(-1)[0][0] || "?").toUpperCase()}</span>`;
+    const av = s.photo_url ? `<img class="avatar" loading="lazy" decoding="async" src="${SM.esc(s.photo_url)}">` : `<span class="avatar">${SM.esc((s.full_name || "?").trim().split(/\s+/).slice(-1)[0][0] || "?").toUpperCase()}</span>`;
     const override = e.tuition_override != null ? ` <span class="badge mute" title="Mức phí riêng">${SM.vnd(e.tuition_override)}</span>` : "";
     const disc = (e.discount_amount || e.discount_percent) ? ` <span class="badge mute" title="Giảm giá">−${e.discount_percent ? e.discount_percent + "%" : SM.vnd(e.discount_amount)}</span>` : "";
     return `<tr>

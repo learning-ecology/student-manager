@@ -6,7 +6,7 @@
   <title>Quản lý học viên</title>
   <link rel="preconnect" href="https://zrmgunriwvcjppjykngk.supabase.co" crossorigin>
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-  <link rel="stylesheet" href="sm.css?v=51">
+  <link rel="stylesheet" href="sm.css?v=52">
   <script>try{if(localStorage.getItem("sm_theme")==="dark")document.documentElement.setAttribute("data-theme","dark");}catch(e){}</script>
 </head>
 <body>
@@ -55,29 +55,40 @@
     <button class="sm-fab" id="fab" hidden aria-label="Thao tác chính"></button>
   </div>
 
+  <!-- Chỉ nạp phần lõi ngay từ đầu; các module khác nạp theo nhu cầu (lazy) để trang mở nhanh hơn, nhất là trên di động. -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js?v=51"></script>
-  <script src="sm-lib.js?v=51"></script>
-  <script src="sm-students.js?v=51"></script>
-  <script src="sm-classes.js?v=51"></script>
-  <script src="sm-cohorts.js?v=51"></script>
-  <script src="sm-schedule.js?v=51"></script>
-  <script src="sm-teaching.js?v=51"></script>
-  <script src="sm-payroll.js?v=51"></script>
-  <script src="sm-checkin.js?v=51"></script>
-  <script src="sm-teacher.js?v=51"></script>
-  <script src="sm-tour.js?v=51"></script>
-  <script src="sm-attendance.js?v=51"></script>
-  <script src="sm-tuition.js?v=51"></script>
-  <script src="sm-payments.js?v=51"></script>
-  <script src="sm-dashboard.js?v=51"></script>
-  <script src="sm-reports.js?v=51"></script>
-  <script src="sm-audit.js?v=51"></script>
-  <script src="sm-tenants.js?v=51"></script>
-  <script src="sm-handbook.js?v=51"></script>
+  <script src="config.js?v=52"></script>
+  <script src="sm-lib.js?v=52"></script>
+  <script src="sm-dashboard.js?v=52"></script>
   <script>
     const $ = id => document.getElementById(id);
     let ME = null, SETTINGS = null, TENANT = null;   // TENANT: {account_type, features} — quyết định module hiển thị
+
+    /* ---- Nạp module theo nhu cầu (lazy) — giảm JS tải lúc đầu ---- */
+    const ASSET_V = ((document.querySelector('script[src*="sm-lib.js"]') || {}).src || "").match(/[?&]v=([^&]+)/);
+    const LAZY = {
+      students: ["Students", "sm-students.js"], classes: ["Classes", "sm-classes.js"], cohorts: ["Cohorts", "sm-cohorts.js"],
+      schedule: ["Schedule", "sm-schedule.js"], ops: ["Ops", "sm-teaching.js"], attendance: ["Attendance", "sm-attendance.js"],
+      tuition: ["Tuition", "sm-tuition.js"], payments: ["Payments", "sm-payments.js"], payroll: ["Payroll", "sm-payroll.js"],
+      reports: ["Reports", "sm-reports.js"], audit: ["Audit", "sm-audit.js"], tenants: ["Tenants", "sm-tenants.js"],
+      handbook: ["Handbook", "sm-handbook.js"], checkin: ["Checkin", "sm-checkin.js"], me: ["Me", "sm-teacher.js"], tour: ["Tour", "sm-tour.js"]
+    };
+    const EXTRA_DEPS = { ops: ["payroll"] };               // Điều hành dùng Payroll.estimateMonth
+    const _loaded = {};
+    function loadScript(file) {
+      if (_loaded[file]) return _loaded[file];
+      _loaded[file] = new Promise((res, rej) => {
+        const s = document.createElement("script");
+        s.src = file + (ASSET_V ? "?v=" + ASSET_V[1] : "");
+        s.onload = res; s.onerror = () => { delete _loaded[file]; rej(new Error("Không tải được " + file)); };
+        document.head.appendChild(s);
+      });
+      return _loaded[file];
+    }
+    function ensureModule(pane) {                           // nạp module (+phụ thuộc) nếu chưa có
+      const need = [pane].concat(EXTRA_DEPS[pane] || []).filter(p => LAZY[p] && !window[LAZY[p][0]]);
+      return need.length ? Promise.all(need.map(p => loadScript(LAZY[p][1]))) : Promise.resolve();
+    }
 
     // sections not built yet → friendly placeholder with the phase number
     const PHASES = {
@@ -145,7 +156,7 @@
         msg.textContent = "✓ Đã lưu."; msg.className = "msg";
         SM.toast("✓ Đã lưu cài đặt", "ok");
       });
-      $("st-tour").onclick = () => Tour.startDefault(TENANT, ME.profile.role);
+      $("st-tour").onclick = () => ensureModule("tour").then(() => Tour.startDefault(TENANT, ME.profile.role));
       if (owner && $("ta-list")) {
         loadTeacherAccounts();
         $("ta-add").onclick = () => teacherForm(null, loadTeacherAccounts);
@@ -311,7 +322,7 @@
       }
     }
 
-    function route() {
+    async function route() {
       const raw = (location.hash.replace("#", "") || "dashboard");
       let pane = raw.split("?")[0];
       const qp = new URLSearchParams(raw.split("?")[1] || "");
@@ -329,6 +340,11 @@
       }
       syncFab(pane);
       closeSide();
+      // nạp module theo nhu cầu (hiện spinner ngay để không thấy "đơ")
+      if (LAZY[pane] && !window[LAZY[pane][0]]) {
+        $("content").innerHTML = `<div class="card placeholder"><span class="spinner"></span></div>`;
+        try { await ensureModule(pane); } catch (e) { $("content").innerHTML = `<div class="card placeholder"><div class="big">⚠️</div><p>Không tải được phần này. Kiểm tra mạng và thử lại.</p></div>`; return; }
+      }
       if (pane === "me") return Me.render($("content"), ME);
       if (pane === "checkin") {
         const cp = new URLSearchParams(raw.split("?")[1] || "");
@@ -378,14 +394,15 @@
     (async function start() {
       ME = await SM.requireAuth();
       if (!ME) return;                       // redirected to login
-      // settings theo tenant (RLS tự lọc → mỗi workspace 1 dòng)
-      const s = await SM.refSettings();
+      // settings + loại tài khoản: tải SONG SONG (bớt 1 vòng mạng khi khởi động)
+      const [s, tnRes] = await Promise.all([
+        SM.refSettings(),
+        sb.from("tenants").select("account_type,features,plan,status").eq("id", ME.profile.tenant_id).maybeSingle().then(r => r, () => ({ data: null }))
+      ]);
       SETTINGS = s || { center_name: "Quản lý học viên", billing_day: 1 };
+      TENANT = (tnRes && tnRes.data) || { account_type: "center", features: {} };
       $("brandName").textContent = SETTINGS.center_name || "Quản lý học viên";
       $("whoName").textContent = (ME.profile.full_name || ME.user.email) + " · " + SM.roleLabel(ME.profile.role);
-      // loại tài khoản + tính năng đang bật của workspace (quyết định sidebar)
-      try { const { data: tn } = await sb.from("tenants").select("account_type,features,plan,status").eq("id", ME.profile.tenant_id).maybeSingle(); TENANT = tn || { account_type: "center", features: {} }; }
-      catch (e) { TENANT = { account_type: "center", features: {} }; }
       // mục "Quản lý giáo viên" chỉ hiện với chủ nền tảng
       if (ME.profile.is_platform_owner) $("navTenants").hidden = false;
       // GIÁO VIÊN: chỉ hiện cổng "Của tôi" + Hướng dẫn, ẩn phần quản trị; mặc định vào #me
@@ -417,7 +434,7 @@
       $("app").hidden = false;
       route();
       // Bảo trì lịch: mỗi tháng tự sinh buổi cho lớp mở (chỉ nhân viên có quyền). Chạy nền, không chặn UI.
-      if (!isTeacher) { try { Classes.ensureMonthlySessions(ME.profile.tenant_id); } catch (e) {} }
+      if (!isTeacher) ensureModule("classes").then(() => { try { Classes.ensureMonthlySessions(ME.profile.tenant_id); } catch (e) {} });
       // Onboarding lần đầu — tự thích ứng theo loại tài khoản, chỉ giới thiệu module đang bật.
       let _imp = false; try { _imp = !!sessionStorage.getItem("sm_impersonate"); } catch (e) {}
       if (!isTeacher && !_imp) maybeOnboard();
@@ -440,7 +457,7 @@
         </div>
         <div class="mf"><button class="btn ghost" data-x="later" style="margin-left:auto;">Để sau</button><button class="btn" id="onb-tour">🧭 Xem hướng dẫn nhanh</button></div></div>`;
       document.body.appendChild(ov);
-      const done = tour => { try { localStorage.setItem(key, "1"); } catch (e) {} ov.remove(); if (tour) setTimeout(() => Tour.startDefault(TENANT, ME.profile.role), 60); };
+      const done = tour => { try { localStorage.setItem(key, "1"); } catch (e) {} ov.remove(); if (tour) ensureModule("tour").then(() => Tour.startDefault(TENANT, ME.profile.role)); };
       ov.addEventListener("click", e => { if (e.target === ov || ["close", "later"].includes(e.target.dataset.x)) done(false); });
       ov.querySelector("#onb-tour").onclick = () => done(true);
     }

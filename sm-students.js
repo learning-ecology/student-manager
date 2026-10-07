@@ -90,7 +90,7 @@ window.Students = (function () {
 
   function rowHtml(s) {
     const av = s.photo_url
-      ? `<img class="avatar" src="${SM.esc(s.photo_url)}" alt="">`
+      ? `<img class="avatar" loading="lazy" decoding="async" src="${SM.esc(s.photo_url)}" alt="">`
       : `<span class="avatar">${SM.esc(initials(s.full_name))}</span>`;
     return `<tr>
       <td data-th="Mã"><code>${SM.esc(s.code)}</code></td>

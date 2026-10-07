@@ -182,7 +182,7 @@ window.Attendance = (function () {
 
   function attRow(s) {
     const cur2 = markState[s.id];
-    const av = s.photo_url ? `<img class="avatar" src="${SM.esc(s.photo_url)}">` : `<span class="avatar">${SM.esc(initials(s.full_name))}</span>`;
+    const av = s.photo_url ? `<img class="avatar" loading="lazy" decoding="async" src="${SM.esc(s.photo_url)}">` : `<span class="avatar">${SM.esc(initials(s.full_name))}</span>`;
     return `<div class="att-row" data-stu="${s.id}">
       <div class="att-who">${av}<div><b>${SM.esc(s.full_name)}</b><br><code style="font-size:.78rem;">${SM.esc(s.code || "")}</code></div></div>
       <div class="att-seg">
